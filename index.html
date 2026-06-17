@@ -847,7 +847,7 @@ function openContact(i){
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
 
 /* ===== SUPABASE: AUTENTICAZIONE + DATI (lettura/scrittura) ===== */
-const SUPA={url:'https://bnphpylcokgntddwnhpw.supabase.co',key:'sb_publishable_geMmYT778PBEwJ7PqpFVUQ_HcIAZ1sv'};
+const SUPA={url:'https://xargkgrqgbcpmxtrfjkz.supabase.co',key:'sb_publishable_qJucftqrLTUtkXeCZV4q0g_u_zP2wsh'};
 let mode='demo', token=SUPA.key, live=false, appStarted=false;
 async function rpc(fn,args){
   const r=await fetch(SUPA.url+'/rest/v1/rpc/'+fn,{method:'POST',headers:{apikey:SUPA.key,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(args||{})});
