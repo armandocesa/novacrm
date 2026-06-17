@@ -701,6 +701,7 @@ function render(view){
   if(view==='pagine'&&window.wirePagine)window.wirePagine();
   if(view==='organizzazione'&&window.wireOrg)window.wireOrg();
   if(view==='superadmin'&&window.wireSuperadmin)window.wireSuperadmin();
+  if(view==='attivita')wireAtt();
 }
 function tenantEmpty(){return note(`<b>Isolamento multi-tenant.</b> Stai vedendo il workspace di <b>${ORGS[orgIdx]}</b>, un altro cliente. Dati separati tramite Row Level Security. Torna a "Rossi Costruzioni" per la demo.`)+`<div class="empty">Nessun dato demo per questo workspace.</div>`;}
 function sp(s){const m={lead:['lead','Lead'],qual:['qual','Qualificato'],cli:['cli','Cliente'],cold:['cold','Freddo']};const[c,l]=m[s];return `<span class="pill ${c}">${l}</span>`;}
@@ -719,7 +720,20 @@ function vTrattative(){
   return `<div class="tabs">${DATA.pipelines.map((p,i)=>`<div class="tab ${i===pipeSel?'active':''}" onclick="pipeSel=${i};render('trattative')">${p}</div>`).join('')}<div class="tab" style="border-style:dashed">+ Nuova pipeline</div></div>
   <div class="kanban" id="kanban">${DATA.stages.map(st=>{const ds=DATA.deals.filter(d=>d.stage===st.id);const sum=ds.reduce((a,d)=>a+d.val,0);return `<div class="kcol" data-stage="${st.id}"><h4>${st.nome}<span class="cnt">${ds.length}</span></h4><div class="ksum">${eur(sum)}</div>${ds.map(d=>`<div class="deal" draggable="true" data-id="${d.id}"><div class="dn">${d.n}</div><div class="dc">${d.az}</div><div class="dv">${eur(d.val)}</div><div class="dm"><span style="color:var(--text-3);font-size:12px">${d.ref}</span><div class="miniav" style="width:24px;height:24px;font-size:10px;background:${ci(d.ref)}">${initials(d.ref)}</div></div></div>`).join('')}</div>`;}).join('')}</div>`;
 }
-function vAttivita(){return `<div class="card"><div class="actlist">${DATA.attivita.map(a=>`<div class="actrow"><span class="dot" style="background:${a.c}"></span><div><div class="t">${a.t}</div><div class="s">${a.s}</div></div><time>${a.when}</time></div>`).join('')}</div></div>`;}
+let attF={area:null,canale:null};
+function attLbl(v){return v||'Non assegnato';}
+function vAttivita(){
+  const list=DATA.attivita;
+  const areas=[...new Set(list.map(a=>attLbl(a.area)))];
+  const canali=[...new Set(list.map(a=>attLbl(a.canale)))];
+  const fl=list.filter(a=>(attF.area===null||attLbl(a.area)===attF.area)&&(attF.canale===null||attLbl(a.canale)===attF.canale));
+  const chips=(vals,cur,attr)=>`<span class="org-chip ${cur===null?'on':''}" data-${attr}="">Tutte</span>`+vals.map(v=>`<span class="org-chip ${cur===v?'on':''}" data-${attr}="${esc(v)}">${esc(v)}</span>`).join('');
+  return note('<b>Attività per area strategica e canale marketing.</b> Filtra le attività da fare per area di business e per canale di acquisizione.')+
+  `<div class="card"><div class="org-filterbar"><div class="org-chiprow"><span class="org-chiplbl">${icon('building')} Area</span>${chips(areas,attF.area,'att-area')}</div><div class="org-chiprow"><span class="org-chiplbl">${icon('share')} Canale</span>${chips(canali,attF.canale,'att-canale')}</div></div>
+  <div style="color:var(--text-3);font-size:12px;margin:6px 0 10px">${fl.length} attività${(attF.area||attF.canale)?' (filtrate)':''}</div>
+  <div class="actlist">${fl.length?fl.map(a=>`<div class="actrow"><span class="dot" style="background:${a.c}"></span><div><div class="t">${a.t}</div><div class="s">${a.s}</div></div><div style="display:flex;gap:6px;margin-left:auto;align-items:center"><span class="pill plain" style="font-size:11px">${esc(attLbl(a.area))}</span><span class="pill cold" style="font-size:11px">${esc(attLbl(a.canale))}</span></div></div>`).join(''):'<div style="color:var(--text-3);padding:20px;text-align:center">Nessuna attività per i filtri scelti.</div>'}</div></div>`;
+}
+function wireAtt(){document.querySelectorAll('[data-att-area]').forEach(el=>el.addEventListener('click',()=>{const v=el.getAttribute('data-att-area');attF.area=v===''?null:v;render('attivita');}));document.querySelectorAll('[data-att-canale]').forEach(el=>el.addEventListener('click',()=>{const v=el.getAttribute('data-att-canale');attF.canale=v===''?null:v;render('attivita');}));}
 function vCalendario(){
   const giorni=['Lun 16','Mar 17','Mer 18','Gio 19','Ven 20'],ore=['09','10','11','12','14','16'];
   const ev={'10-Lun 16':['Call Marco F.','#4f46e5'],'10-Gio 19':['Demo Adriatica','#0d9488'],'14-Mar 17':['Preventivo GreenFarm','#d97706'],'11-Ven 20':['Richiamo Boutique','#9097a3'],'16-Mer 18':['Follow-up Studio E.','#15a34a']};
@@ -854,7 +868,7 @@ function applyData(d){
   if(d.contatti)DATA.contatti=d.contatti.map(c=>({...c,n:esc(c.n),az:esc(c.az),ruolo:esc(c.ruolo),email:esc(c.email),tel:esc(c.tel)}));
   if(d.stages&&d.stages.length)DATA.stages=d.stages.map(s=>({id:s.id,nome:esc(s.nome)}));
   if(d.deals)DATA.deals=d.deals.map(x=>({...x,n:esc(x.n),az:esc(x.az),ref:esc(x.ref)}));
-  if(d.attivita){const cols=['#4f46e5','#d97706','#0d9488','#15a34a','#9097a3'];DATA.attivita=d.attivita.map((a,i)=>({t:esc(a.t),s:esc(a.s||''),when:'',c:cols[i%cols.length]}));}
+  if(d.attivita){const cols=['#4f46e5','#d97706','#0d9488','#15a34a','#9097a3'];DATA.attivita=d.attivita.map((a,i)=>({t:esc(a.t),s:esc(a.s||''),when:'',c:cols[i%cols.length],area:a.area?esc(a.area):null,canale:a.canale?esc(a.canale):null}));}
   if(d.email){DATA.email=d.email.map((m,i)=>({from:esc(m.from||m.addr),addr:esc(m.addr),sub:esc(m.sub),time:'',unread:i===0,link:'Contatto: '+esc(m.from||m.addr),ai:(m.ai||'').split('; ').filter(Boolean).map(esc),body:esc(m.body||'')}));}
 }
 async function loadData(){
@@ -973,7 +987,7 @@ function pgNewBlock(type){const p=PG.pages[PG.current];let b;if(type==='heading'
 /* ---------- SUPERADMIN ---------- */
 function vSuperadmin(){
   if(!isSuperadmin())return note('<b>Accesso riservato.</b> Questa sezione è visibile solo al superadmin dell’applicazione.');
-  const roles=[['admin','Amministratore'],['manager','Manager'],['sales','Commerciale'],['support','Supporto']];
+  const roles=[['admin','Admin'],['senior','Senior'],['junior','Junior']];
   const roleOpts=roles.map(r=>`<option value="${esc(r[0])}">${esc(r[1])}</option>`).join('');
   return `<div class="sa-grid">
     <div class="card"><div class="sa-head">${icon('building')}<h3>Organizzazioni</h3><button class="btn ghost sm" onclick="saLoadOrgs()">${icon('settings')}Aggiorna</button></div><p class="sa-sub">Elenco delle organizzazioni gestite.</p><div class="tablecard" id="saOrgsWrap"><div class="callout">Caricamento…</div></div></div>
