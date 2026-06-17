@@ -884,7 +884,9 @@ async function loadData(){
     tog.classList.add('sbx');tog.style.borderColor='var(--green)';tog.style.color='var(--green)';tog.querySelector('.d').style.background='var(--green)';
     render(current);
   }catch(e){
-    live=false;lab.textContent='Dati locali (offline)';
+    live=false;
+    if(mode==='auth' && /HTTP 401/.test(e.message||'')){ noAccess(); return; }
+    lab.textContent='Dati locali (offline)';
     console.warn('Supabase non raggiungibile, uso i dati di esempio integrati:',e.message);
   }
 }
