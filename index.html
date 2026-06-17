@@ -721,7 +721,7 @@ function render(view){
   if(view==='trattative')wireDnd();
   if(view==='email')wireMail();
   if(view==='messaggi')wireChat();
-  if(view==='pagine'&&window.wirePagine)window.wirePagine();
+  if(view==='pagine'){if(window.wirePagine)window.wirePagine();if(window.pgMaybeLoadBackend)window.pgMaybeLoadBackend();}
   if(view==='organizzazione'&&window.wireOrg)window.wireOrg();
   if(view==='superadmin'&&window.wireSuperadmin)window.wireSuperadmin();
   if(view==='attivita')wireAtt();
@@ -737,11 +737,17 @@ function vDashboard(){
   <div class="card"><h3>Prossime attività <a>vedi tutte</a></h3><div class="actlist">${DATA.attivita.map(a=>`<div class="actrow"><span class="dot" style="background:${a.c}"></span><div><div class="t">${a.t}</div><div class="s">${a.s}</div></div><time>${a.when}</time></div>`).join('')}</div></div></div>`;
 }
 function kpi(ic,l,v,d,up){return `<div class="card kpi"><small>${icon(ic)}${l}</small><div class="v">${v}</div><div class="d ${up?'up':'down'}">${icon(up?'trendUp':'trendDown')}${d} vs mese scorso</div></div>`;}
-function vContatti(){return `<div class="tablecard"><table><thead><tr><th>Nome</th><th>Azienda</th><th>Ruolo</th><th>Stato</th><th>Valore</th></tr></thead><tbody>${DATA.contatti.map((c,i)=>`<tr onclick="openContact(${i})"><td><div class="uava"><div class="miniav" style="background:${ci(c.n)}">${initials(c.n)}</div><b>${c.n}</b></div></td><td>${c.az}</td><td style="color:var(--text-3)">${c.ruolo}</td><td>${sp(c.stato)}</td><td><b>${eur(c.val)}</b></td></tr>`).join('')}</tbody></table></div>`;}
-function vAziende(){return `<div class="tablecard"><table><thead><tr><th>Azienda</th><th>Settore</th><th>Dipendenti</th><th>Città</th><th>Stato</th><th>Valore</th></tr></thead><tbody>${DATA.aziende.map(a=>`<tr><td><div class="uava"><div class="miniav" style="background:${ci(a.n)};border-radius:8px">${initials(a.n)}</div><b>${a.n}</b></div></td><td style="color:var(--text-3)">${a.sett}</td><td>${a.dip}</td><td>${a.citta}</td><td>${sp(a.stato)}</td><td><b>${eur(a.val)}</b></td></tr>`).join('')}</tbody></table></div>`;}
+/* Mostra la colonna azioni (elimina) solo in modalità collegata. */
+function canDelete(){return live && mode==='auth';}
+function delBtn(table,id,label){
+  if(!canDelete()||!id)return '';
+  return `<button class="btn ghost sm" title="Elimina" onclick="event.stopPropagation();deleteRecord('${esc(table)}','${esc(id)}','${esc(label)}')" style="padding:5px 9px;color:var(--red)">${icon('warn')}</button>`;
+}
+function vContatti(){const act=canDelete();return `<div class="tablecard"><table><thead><tr><th>Nome</th><th>Azienda</th><th>Ruolo</th><th>Stato</th><th>Valore</th>${act?'<th style="text-align:right">Azioni</th>':''}</tr></thead><tbody>${DATA.contatti.map((c,i)=>`<tr onclick="openContact(${i})"><td><div class="uava"><div class="miniav" style="background:${ci(c.n)}">${initials(c.n)}</div><b>${c.n}</b></div></td><td>${c.az}</td><td style="color:var(--text-3)">${c.ruolo}</td><td>${sp(c.stato)}</td><td><b>${eur(c.val)}</b></td>${act?`<td style="text-align:right">${delBtn('contacts',c.id,c.n)}</td>`:''}</tr>`).join('')}</tbody></table></div>`;}
+function vAziende(){const act=canDelete();return `<div class="tablecard"><table><thead><tr><th>Azienda</th><th>Settore</th><th>Dipendenti</th><th>Città</th><th>Stato</th><th>Valore</th>${act?'<th style="text-align:right">Azioni</th>':''}</tr></thead><tbody>${DATA.aziende.map(a=>`<tr><td><div class="uava"><div class="miniav" style="background:${ci(a.n)};border-radius:8px">${initials(a.n)}</div><b>${a.n}</b></div></td><td style="color:var(--text-3)">${a.sett}</td><td>${a.dip}</td><td>${a.citta}</td><td>${sp(a.stato)}</td><td><b>${eur(a.val)}</b></td>${act?`<td style="text-align:right">${delBtn('companies',a.id,a.n)}</td>`:''}</tr>`).join('')}</tbody></table></div>`;}
 function vTrattative(){
   return `<div class="tabs">${DATA.pipelines.map((p,i)=>`<div class="tab ${i===pipeSel?'active':''}" onclick="pipeSel=${i};render('trattative')">${p}</div>`).join('')}<div class="tab" style="border-style:dashed">+ Nuova pipeline</div></div>
-  <div class="kanban" id="kanban">${DATA.stages.map(st=>{const ds=DATA.deals.filter(d=>d.stage===st.id);const sum=ds.reduce((a,d)=>a+d.val,0);return `<div class="kcol" data-stage="${st.id}"><h4>${st.nome}<span class="cnt">${ds.length}</span></h4><div class="ksum">${eur(sum)}</div>${ds.map(d=>`<div class="deal" draggable="true" data-id="${d.id}"><div class="dn">${d.n}</div><div class="dc">${d.az}</div><div class="dv">${eur(d.val)}</div><div class="dm"><span style="color:var(--text-3);font-size:12px">${d.ref}</span><div class="miniav" style="width:24px;height:24px;font-size:10px;background:${ci(d.ref)}">${initials(d.ref)}</div></div></div>`).join('')}</div>`;}).join('')}</div>`;
+  <div class="kanban" id="kanban">${DATA.stages.map(st=>{const ds=DATA.deals.filter(d=>d.stage===st.id);const sum=ds.reduce((a,d)=>a+d.val,0);return `<div class="kcol" data-stage="${st.id}"><h4>${st.nome}<span class="cnt">${ds.length}</span></h4><div class="ksum">${eur(sum)}</div>${ds.map(d=>`<div class="deal" draggable="true" data-id="${d.id}"><div class="dn">${d.n}</div><div class="dc">${d.az}</div><div class="dv">${eur(d.val)}</div><div class="dm"><span style="color:var(--text-3);font-size:12px">${d.ref}</span><div style="display:flex;align-items:center;gap:6px">${canDelete()&&d.id?`<span title="Elimina" style="cursor:pointer;color:var(--red);font-size:16px;line-height:1" onclick="event.stopPropagation();deleteRecord('deals','${esc(d.id)}','${esc(d.n)}')">×</span>`:''}<div class="miniav" style="width:24px;height:24px;font-size:10px;background:${ci(d.ref)}">${initials(d.ref)}</div></div></div></div>`).join('')}</div>`;}).join('')}</div>`;
 }
 let attF={area:null,canale:null};
 function attLbl(v){return v||'Non assegnato';}
@@ -754,7 +760,7 @@ function vAttivita(){
   return note('<b>Attività per area strategica e canale marketing.</b> Filtra le attività da fare per area di business e per canale di acquisizione.')+
   `<div class="card"><div class="org-filterbar"><div class="org-chiprow"><span class="org-chiplbl">${icon('building')} Area</span>${chips(areas,attF.area,'att-area')}</div><div class="org-chiprow"><span class="org-chiplbl">${icon('share')} Canale</span>${chips(canali,attF.canale,'att-canale')}</div></div>
   <div style="color:var(--text-3);font-size:12px;margin:6px 0 10px">${fl.length} attività${(attF.area||attF.canale)?' (filtrate)':''}</div>
-  <div class="actlist">${fl.length?fl.map(a=>`<div class="actrow"><span class="dot" style="background:${a.c}"></span><div><div class="t">${a.t}</div><div class="s">${a.s}</div></div><div style="display:flex;gap:6px;margin-left:auto;align-items:center"><span class="pill plain" style="font-size:11px">${esc(attLbl(a.area))}</span><span class="pill cold" style="font-size:11px">${esc(attLbl(a.canale))}</span></div></div>`).join(''):'<div style="color:var(--text-3);padding:20px;text-align:center">Nessuna attività per i filtri scelti.</div>'}</div></div>`;
+  <div class="actlist">${fl.length?fl.map(a=>`<div class="actrow"><span class="dot" style="background:${a.c}"></span><div><div class="t">${a.t}</div><div class="s">${a.s}</div></div><div style="display:flex;gap:6px;margin-left:auto;align-items:center"><span class="pill plain" style="font-size:11px">${esc(attLbl(a.area))}</span><span class="pill cold" style="font-size:11px">${esc(attLbl(a.canale))}</span>${canDelete()&&a.id?`<span title="Elimina" style="cursor:pointer;color:var(--red);font-size:16px;line-height:1;padding:0 4px" onclick="deleteRecord('activities','${esc(a.id)}','${esc(a.t)}')">×</span>`:''}</div></div>`).join(''):'<div style="color:var(--text-3);padding:20px;text-align:center">Nessuna attività per i filtri scelti.</div>'}</div></div>`;
 }
 function wireAtt(){document.querySelectorAll('[data-att-area]').forEach(el=>el.addEventListener('click',()=>{const v=el.getAttribute('data-att-area');attF.area=v===''?null:v;render('attivita');}));document.querySelectorAll('[data-att-canale]').forEach(el=>el.addEventListener('click',()=>{const v=el.getAttribute('data-att-canale');attF.canale=v===''?null:v;render('attivita');}));}
 function vCalendario(){
@@ -909,11 +915,14 @@ function toast(t){let el=document.getElementById('toast');if(!el){el=document.cr
 function applyData(d){
   // Tutti i campi testuali provenienti dal database vengono escapati qui:
   // ogni vista legge da DATA, quindi questo blocca la XSS in tutte le sezioni.
-  if(d.aziende)DATA.aziende=d.aziende.map(a=>({...a,n:esc(a.n),sett:esc(a.sett),citta:esc(a.citta)}));
-  if(d.contatti)DATA.contatti=d.contatti.map(c=>({...c,n:esc(c.n),az:esc(c.az),ruolo:esc(c.ruolo),email:esc(c.email),tel:esc(c.tel)}));
+  // Nota: l'eventuale campo `id` (uuid del record) viene preservato così com'è
+  // (non è testo da mostrare) per consentire update/delete. Se `crm_me` non lo
+  // espone, `id` sarà undefined e i pulsanti elimina non verranno mostrati.
+  if(d.aziende)DATA.aziende=d.aziende.map(a=>({...a,id:a.id,n:esc(a.n),sett:esc(a.sett),citta:esc(a.citta)}));
+  if(d.contatti)DATA.contatti=d.contatti.map(c=>({...c,id:c.id,n:esc(c.n),az:esc(c.az),ruolo:esc(c.ruolo),email:esc(c.email),tel:esc(c.tel)}));
   if(d.stages&&d.stages.length)DATA.stages=d.stages.map(s=>({id:s.id,nome:esc(s.nome)}));
   if(d.deals)DATA.deals=d.deals.map(x=>({...x,n:esc(x.n),az:esc(x.az),ref:esc(x.ref)}));
-  if(d.attivita){const cols=['#4f46e5','#d97706','#0d9488','#15a34a','#9097a3'];DATA.attivita=d.attivita.map((a,i)=>({t:esc(a.t),s:esc(a.s||''),when:'',c:cols[i%cols.length],area:a.area?esc(a.area):null,canale:a.canale?esc(a.canale):null}));}
+  if(d.attivita){const cols=['#4f46e5','#d97706','#0d9488','#15a34a','#9097a3'];DATA.attivita=d.attivita.map((a,i)=>({id:a.id,t:esc(a.t),s:esc(a.s||''),when:'',c:cols[i%cols.length],area:a.area?esc(a.area):null,canale:a.canale?esc(a.canale):null}));}
   if(d.email){DATA.email=d.email.map((m,i)=>({from:esc(m.from||m.addr),addr:esc(m.addr),sub:esc(m.sub),time:'',unread:i===0,link:'Contatto: '+esc(m.from||m.addr),ai:(m.ai||'').split('; ').filter(Boolean).map(esc),body:esc(m.body||'')}));}
 }
 async function loadData(){
@@ -928,6 +937,7 @@ async function loadData(){
     else { d=await rpc('crm_demo'); }
     applyData(d);
     live=true;
+    pgBackendLoaded=false; // forza il ricaricamento delle Pagine dal backend al prossimo ingresso
     lab.textContent=(mode==='auth'?'Live · ':'Demo · ')+(d.org||'Supabase');
     tog.classList.add('sbx');tog.style.borderColor='var(--green)';tog.style.color='var(--green)';tog.querySelector('.d').style.background='var(--green)';
     render(current);
@@ -968,8 +978,15 @@ async function loadMyModules(){
   }
 }
 
-/* --- Nuovo contatto (scrive su Supabase) --- */
+/* --- Pulsante "Nuovo": apre il form coerente con la vista corrente --- */
 function openNew(){
+  if(current==='aziende')return openNewCompany();
+  if(current==='trattative')return openNewDeal();
+  if(current==='attivita')return openNewActivity();
+  return openNewContact();
+}
+/* --- Nuovo contatto (scrive su Supabase) --- */
+function openNewContact(){
   document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:6px">Nuovo contatto</div>
     <div style="color:var(--text-3);font-size:13px;margin-bottom:18px">${live?'Verrà salvato su Supabase':'Modalità offline: salvato solo in locale'}</div>
@@ -995,6 +1012,107 @@ async function saveContact(){
   }else{
     DATA.contatti.push({n:esc(name),az:esc(a.p_company),ruolo:esc(a.p_role),email:esc(a.p_email),tel:esc(a.p_phone),stato:({qualified:'qual',customer:'cli'}[a.p_status]||a.p_status),val:0});
     closeDrawer();render('contatti');toast(mode==='demo'?'Aggiunto (demo, solo locale)':'Contatto aggiunto (locale)');
+  }
+}
+
+/* --- Nuova azienda (scrive su Supabase) --- */
+function openNewCompany(){
+  document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Nuova azienda</div>
+    <div style="color:var(--text-3);font-size:13px;margin-bottom:18px">${live&&mode==='auth'?'Verrà salvata su Supabase':'Modalità offline: salvata solo in locale'}</div>
+    <div class="ff"><label>Nome azienda *</label><input id="c_name" placeholder="Azienda SpA"></div>
+    <div class="ff"><label>Settore</label><input id="c_sector" placeholder="es. Software"></div>
+    <div class="ff"><label>Dipendenti</label><input id="c_emp" type="number" min="0" placeholder="es. 50"></div>
+    <div class="ff"><label>Città</label><input id="c_city" placeholder="es. Milano"></div>
+    <div class="ff"><label>Stato</label><select id="c_status"><option value="lead">Lead</option><option value="qualified">Qualificato</option><option value="customer">Cliente</option><option value="cold">Freddo</option></select></div>
+    <div class="ff"><label>Valore (€)</label><input id="c_value" type="number" min="0" placeholder="0"></div>
+    <div id="c_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+    <button class="btn" onclick="saveCompany()">${icon('plus')}Salva azienda</button>`;
+  document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('show');
+}
+async function saveCompany(){
+  const name=gv('c_name');const msg=document.getElementById('c_msg');
+  if(!name){msg.style.color='var(--red)';msg.textContent='Il nome è obbligatorio.';return;}
+  const a={p_name:name,p_sector:gv('c_sector'),p_employees:parseInt(gv('c_emp'),10)||0,p_city:gv('c_city'),p_status:gv('c_status'),p_value:parseFloat(gv('c_value'))||0};
+  current='aziende';document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',n.dataset.view==='aziende'));
+  if(live && mode==='auth'){
+    try{msg.style.color='var(--text-3)';msg.textContent='Salvataggio su Supabase…';await rpc('crm_add_company',a);await loadData();closeDrawer();render('aziende');toast('Azienda salvata su Supabase');}
+    catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+e.message;toast('Errore: '+e.message);}
+  }else{
+    DATA.aziende.push({n:esc(name),sett:esc(a.p_sector),dip:a.p_employees,citta:esc(a.p_city),val:a.p_value,stato:({qualified:'qual',customer:'cli'}[a.p_status]||a.p_status)});
+    closeDrawer();render('aziende');toast(mode==='demo'?'Aggiunta (demo, solo locale)':'Azienda aggiunta (locale)');
+  }
+}
+
+/* --- Nuovo deal/trattativa (scrive su Supabase) --- */
+function openNewDeal(){
+  const stageOpts=DATA.stages.map(s=>`<option value="${esc(s.id)}">${esc(s.nome)}</option>`).join('');
+  document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Nuova trattativa</div>
+    <div style="color:var(--text-3);font-size:13px;margin-bottom:18px">${live&&mode==='auth'?'Verrà salvata su Supabase':'Modalità offline: salvata solo in locale'}</div>
+    <div class="ff"><label>Nome trattativa *</label><input id="d_name" placeholder="es. Rinnovo licenze"></div>
+    <div class="ff"><label>Azienda</label><select id="d_comp"><option value="">— Nessuna —</option>${DATA.aziende.map(a=>`<option>${esc(a.n)}</option>`).join('')}</select></div>
+    <div class="ff"><label>Contatto</label><select id="d_contact"><option value="">— Nessuno —</option>${DATA.contatti.map(c=>`<option>${esc(c.n)}</option>`).join('')}</select></div>
+    <div class="ff"><label>Valore (€)</label><input id="d_value" type="number" min="0" placeholder="0"></div>
+    <div class="ff"><label>Stadio</label><select id="d_stage">${stageOpts}</select></div>
+    <div id="d_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+    <button class="btn" onclick="saveDeal()">${icon('plus')}Salva trattativa</button>`;
+  document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('show');
+}
+async function saveDeal(){
+  const name=gv('d_name');const msg=document.getElementById('d_msg');
+  if(!name){msg.style.color='var(--red)';msg.textContent='Il nome è obbligatorio.';return;}
+  const a={p_name:name,p_company:gv('d_comp'),p_contact:gv('d_contact'),p_value:parseFloat(gv('d_value'))||0,p_stage:gv('d_stage')};
+  current='trattative';document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',n.dataset.view==='trattative'));
+  if(live && mode==='auth'){
+    try{msg.style.color='var(--text-3)';msg.textContent='Salvataggio su Supabase…';await rpc('crm_add_deal',a);await loadData();closeDrawer();render('trattative');toast('Trattativa salvata su Supabase');}
+    catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+e.message;toast('Errore: '+e.message);}
+  }else{
+    const nid=(DATA.deals.reduce((m,d)=>Math.max(m,+d.id||0),0))+1;
+    DATA.deals.push({id:nid,n:esc(name),az:esc(a.p_company),val:a.p_value,stage:a.p_stage,ref:esc(a.p_contact)});
+    closeDrawer();render('trattative');toast(mode==='demo'?'Aggiunta (demo, solo locale)':'Trattativa aggiunta (locale)');
+  }
+}
+
+/* --- Nuova attività (scrive su Supabase) --- */
+function openNewActivity(){
+  document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Nuova attività</div>
+    <div style="color:var(--text-3);font-size:13px;margin-bottom:18px">${live&&mode==='auth'?'Verrà salvata su Supabase':'Modalità offline: salvata solo in locale'}</div>
+    <div class="ff"><label>Oggetto *</label><input id="t_subject" placeholder="es. Chiamata di follow-up"></div>
+    <div class="ff"><label>Tipo</label><select id="t_type"><option value="call">Chiamata</option><option value="email">Email</option><option value="meeting">Riunione</option><option value="task">Task</option></select></div>
+    <div class="ff"><label>Note</label><input id="t_notes" placeholder="Dettagli…"></div>
+    <div class="ff"><label>Scadenza</label><input id="t_due" type="datetime-local"></div>
+    <div id="t_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+    <button class="btn" onclick="saveActivity()">${icon('plus')}Salva attività</button>`;
+  document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('show');
+}
+async function saveActivity(){
+  const subject=gv('t_subject');const msg=document.getElementById('t_msg');
+  if(!subject){msg.style.color='var(--red)';msg.textContent='L\'oggetto è obbligatorio.';return;}
+  const due=gv('t_due');
+  const a={p_subject:subject,p_type:gv('t_type'),p_notes:gv('t_notes'),p_due_at:due?new Date(due).toISOString():null,p_contact:null,p_deal:null};
+  current='attivita';document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',n.dataset.view==='attivita'));
+  if(live && mode==='auth'){
+    try{msg.style.color='var(--text-3)';msg.textContent='Salvataggio su Supabase…';await rpc('crm_add_activity',a);await loadData();closeDrawer();render('attivita');toast('Attività salvata su Supabase');}
+    catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+e.message;toast('Errore: '+e.message);}
+  }else{
+    DATA.attivita.push({t:esc(subject),s:esc(a.p_notes),when:due?esc(due.replace('T',' ')):'',c:'#4f46e5',area:null,canale:null});
+    closeDrawer();render('attivita');toast(mode==='demo'?'Aggiunta (demo, solo locale)':'Attività aggiunta (locale)');
+  }
+}
+
+/* --- Cancellazione record (solo admin lato DB) --- */
+async function deleteRecord(table,id,label){
+  if(!(live && mode==='auth')){toast('Cancellazione disponibile solo in modalità collegata');return;}
+  if(!id){toast('ID non disponibile per questo record');return;}
+  if(!confirm('Eliminare '+(label||'questo record')+'? L\'operazione non è reversibile.'))return;
+  try{
+    await rpc('crm_delete_record',{p_table:table,p_id:id});
+    await loadData();render(current);toast('Record eliminato');
+  }catch(e){
+    const m=e&&e.message?e.message:String(e);
+    toast(/admin|permess|denied|negato/i.test(m)?'Permesso negato: solo admin può eliminare':('Errore: '+m));
   }
 }
 /* --- Avvio app + autenticazione --- */
@@ -1045,6 +1163,64 @@ const PG={ pages:{
     {id:'b10',type:'text',text:'Pagina vuota — aggiungi un blocco qui sotto.'}]} },
   current:'p_home', rootOrder:['p_home'], seq:100 };
 function pgUid(p){return p+(PG.seq++);}
+/* ===== Pagine: backend Supabase (modalità auth) =====
+   In modalità collegata l'albero, le pagine e i blocchi sono persistiti via RPC.
+   In demo/offline si mantiene il modello in-memory `PG` originale. */
+function pgBackendOn(){return live && mode==='auth';}
+let pgLoading=false;
+/* Mappa il tipo di blocco DB -> tipo di rendering interno. */
+const PG_DBTYPE_TO_UI={paragraph:'text',heading:'heading',todo:'todo',bullet:'bullet',numbered:'bullet',divider:'divider',quote:'quote',code:'code',image:'image'};
+const PG_UI_TO_DBTYPE={text:'paragraph',heading:'heading',todo:'todo',bullet:'bullet'};
+function pgBlockText(content){if(content==null)return '';if(typeof content==='string'){try{content=JSON.parse(content);}catch(e){return content;}}return content&&typeof content==='object'?(content.text||''):String(content);}
+function pgBlockDone(content){if(typeof content==='string'){try{content=JSON.parse(content);}catch(e){return false;}}return !!(content&&typeof content==='object'&&(content.checked||content.done));}
+/* Carica l'albero delle pagine dal DB nel modello `PG`. Conserva la selezione/apertura correnti dove possibile. */
+async function pgLoadTree(){
+  const rows=await rpc('crm_pages_list',{})||[];
+  const prevOpen={};Object.values(PG.pages).forEach(p=>{prevOpen[p.id]=!!p.open;});
+  const pages={};const rootOrder=[];
+  rows.slice().sort((a,b)=>(a.position||0)-(b.position||0)).forEach(r=>{
+    const id=String(r.id);
+    pages[id]={id,parent:r.parent_id?String(r.parent_id):null,title:r.title||'Senza titolo',emoji:r.icon||'📄',position:r.position||0,open:prevOpen[id]!==undefined?prevOpen[id]:true,blocks:(PG.pages[id]&&PG.pages[id].blocks)||[]};
+    if(!r.parent_id)rootOrder.push(id);
+  });
+  PG.pages=pages;PG.rootOrder=rootOrder;
+  if(!PG.pages[PG.current])PG.current=rootOrder[0]||null;
+}
+/* Carica i blocchi della pagina corrente dal DB. */
+async function pgLoadPage(pid){
+  if(!pid)return;
+  const res=await rpc('crm_page_get',{p_id:pid});
+  if(!res||!res.page){return;}
+  const pg=res.page;const id=String(pg.id);
+  if(PG.pages[id]){PG.pages[id].title=pg.title||'Senza titolo';PG.pages[id].emoji=pg.icon||'📄';PG.pages[id].parent=pg.parent_id?String(pg.parent_id):null;}
+  const blocks=(res.blocks||[]).slice().sort((a,b)=>(a.position||0)-(b.position||0)).map(b=>({
+    id:String(b.id),
+    dbtype:b.type,
+    type:PG_DBTYPE_TO_UI[b.type]||'text',
+    text:pgBlockText(b.content),
+    done:pgBlockDone(b.content),
+    position:b.position||0
+  }));
+  if(PG.pages[id])PG.pages[id].blocks=blocks;
+}
+/* Entrata nella vista Pagine in modalità auth: carica tutto e ridisegna. */
+async function pgEnterBackend(){
+  if(pgLoading)return;pgLoading=true;
+  try{
+    await pgLoadTree();
+    if(PG.current)await pgLoadPage(PG.current);
+  }catch(e){
+    toast('Errore caricamento pagine: '+(e&&e.message?e.message:e));
+  }finally{pgLoading=false;render('pagine');}
+}
+/* Carica dal backend solo una volta per ingresso nella vista (evita loop di render). */
+let pgBackendLoaded=false;
+window.pgMaybeLoadBackend=function(){
+  if(!pgBackendOn()){pgBackendLoaded=false;return;}
+  if(pgBackendLoaded||pgLoading)return;
+  pgBackendLoaded=true;
+  pgEnterBackend();
+};
 const PG_STATUS={'Da contattare':'amb','In corso':'blu','Vinta':'grn','Persa':'plain'};
 const PG_STATUS_LIST=Object.keys(PG_STATUS);
 function pgChildren(pid){return Object.values(PG.pages).filter(p=>p.parent===pid);}
@@ -1054,15 +1230,100 @@ function pgRenderBlock(b){switch(b.type){
   case 'text':return `<div class="nz-block nz-p" data-bid="${esc(b.id)}"><div class="nz-ptext" contenteditable="true" data-edit="text" data-bid="${esc(b.id)}">${esc(b.text)}</div>${pgBlockMenu(b.id)}</div>`;
   case 'todo':return `<div class="nz-block nz-todo ${b.done?'nz-done':''}" data-bid="${esc(b.id)}"><span class="nz-check" data-pgcheck="${esc(b.id)}">${b.done?icon('check'):''}</span><div class="nz-todotext" contenteditable="true" data-edit="text" data-bid="${esc(b.id)}">${esc(b.text)}</div>${pgBlockMenu(b.id)}</div>`;
   case 'bullet':return `<div class="nz-block nz-bullet" data-bid="${esc(b.id)}"><span class="nz-dot">•</span><div class="nz-bullettext" contenteditable="true" data-edit="text" data-bid="${esc(b.id)}">${esc(b.text)}</div>${pgBlockMenu(b.id)}</div>`;
+  case 'divider':return `<div class="nz-block" data-bid="${esc(b.id)}" style="padding:8px 28px 8px 4px"><hr style="border:none;border-top:1px solid var(--border);margin:4px 0">${pgBlockMenu(b.id)}</div>`;
+  case 'quote':return `<div class="nz-block" data-bid="${esc(b.id)}"><div class="nz-ptext" contenteditable="true" data-edit="text" data-bid="${esc(b.id)}" style="border-left:3px solid var(--border);padding-left:12px;color:var(--text-2);font-style:italic">${esc(b.text)}</div>${pgBlockMenu(b.id)}</div>`;
+  case 'code':return `<div class="nz-block" data-bid="${esc(b.id)}"><div class="code" contenteditable="true" data-edit="text" data-bid="${esc(b.id)}" style="outline:none">${esc(b.text)}</div>${pgBlockMenu(b.id)}</div>`;
+  case 'image':return `<div class="nz-block" data-bid="${esc(b.id)}"><div class="nz-ptext" style="color:var(--text-3)">🖼️ ${esc(b.text||'Immagine')}</div>${pgBlockMenu(b.id)}</div>`;
   case 'db':return pgRenderDB(b); default:return '';}}
 function pgBlockMenu(bid){return `<span class="nz-bdel" data-pgdel="${esc(bid)}" title="Elimina blocco">×</span>`;}
 function pgRenderDB(b){const isTable=b.view==='table';let body;if(isTable){body=`<div class="tablecard nz-dbtable"><table><thead><tr>${b.cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${b.rows.map(r=>`<tr>${r.cells.map((cell,ci)=>{if(ci===b.statusCol){const cls=PG_STATUS[cell]||'plain';return `<td><span class="pill ${cls}">${esc(cell)}</span></td>`;}if(b.cols[ci]&&/valore|importo|prezzo/i.test(b.cols[ci])&&cell!==''){return `<td>${esc(eur(Number(cell)||0))}</td>`;}return `<td>${esc(cell)}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;}else{const groups={};PG_STATUS_LIST.forEach(s=>groups[s]=[]);b.rows.forEach(r=>{const s=r.cells[b.statusCol];if(!groups[s])groups[s]=[];groups[s].push(r);});body=`<div class="kanban nz-board">${Object.keys(groups).map(s=>{const cls=PG_STATUS[s]||'plain';return `<div class="kcol nz-kcol"><div class="nz-khead"><span class="pill ${cls}">${esc(s)}</span><span class="nz-kcount">${groups[s].length}</span></div>${groups[s].map(r=>`<div class="deal nz-card"><div class="nz-cardtitle">${esc(r.cells[0])}</div><div class="nz-cardsub">${esc(r.cells[1]||'')}</div>${r.cells[3]!==undefined&&r.cells[3]!==''?`<div class="nz-cardval">${esc(eur(Number(r.cells[3])||0))}</div>`:''}</div>`).join('')}</div>`;}).join('')}</div>`;}return `<div class="nz-block nz-db" data-bid="${esc(b.id)}"><div class="nz-dbbar"><span class="nz-dblabel">${icon('grid')} Database</span><div class="tabs nz-dbtabs"><span class="tab ${isTable?'active':''}" data-pgview="${esc(b.id)}|table">${icon('list')} Tabella</span><span class="tab ${!isTable?'active':''}" data-pgview="${esc(b.id)}|board">${icon('grid')} Board</span></div><span class="nz-bdel" data-pgdel="${esc(b.id)}" title="Elimina blocco">×</span></div>${body}</div>`;}
-function vPagine(){const p=PG.pages[PG.current]||PG.pages[PG.rootOrder[0]];let crumbs=[],cur=p;while(cur){crumbs.unshift(cur);cur=cur.parent?PG.pages[cur.parent]:null;}const crumbHtml=crumbs.map((c,i)=>`<span class="nz-crumb" data-pgopen="${esc(c.id)}">${esc(c.emoji||'📄')} ${esc(c.title)}</span>${i<crumbs.length-1?'<span class="nz-crumbsep">/</span>':''}`).join('');const blocksHtml=p.blocks.map(pgRenderBlock).join('');return `<div class="nz-wrap"><aside class="nz-side card"><div class="nz-sidehead"><span class="nz-sidetitle">${icon('book')} Pagine</span><span class="btn ghost sm nz-newroot" data-pgaddroot="1">${icon('plus')} Nuova</span></div><div class="nz-tree">${pgTreeRows(null,0)}</div></aside><section class="nz-editor card"><div class="nz-crumbs">${crumbHtml}</div><div class="nz-pagehead"><span class="nz-pageemoji" data-pgemoji="${esc(p.id)}" title="Cambia emoji">${esc(p.emoji||'📄')}</span><div class="nz-pagetitle" contenteditable="true" data-edit="pagetitle" data-pid="${esc(p.id)}">${esc(p.title)}</div></div><div class="nz-blocks">${blocksHtml||'<div class="nz-empty">Pagina vuota. Aggiungi un blocco qui sotto.</div>'}</div><div class="nz-addbar"><span class="nz-addbtn" data-pgnew="heading">${icon('plus')} Titolo</span><span class="nz-addbtn" data-pgnew="text">${icon('plus')} Testo</span><span class="nz-addbtn" data-pgnew="todo">${icon('plus')} To-do</span><span class="nz-addbtn" data-pgnew="bullet">${icon('plus')} Elenco</span><span class="nz-addbtn" data-pgnew="db">${icon('plus')} Database</span></div></section></div>`;}
-function wirePagine(){const root=document.querySelector('.nz-wrap');if(!root)return;root.querySelectorAll('[data-pgtoggle]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();const id=el.getAttribute('data-pgtoggle');PG.pages[id].open=!PG.pages[id].open;render('pagine');}));root.querySelectorAll('[data-pgopen]').forEach(el=>el.addEventListener('click',e=>{if(e.target.closest('[data-pgtoggle]')||e.target.closest('[data-pgadd]'))return;PG.current=el.getAttribute('data-pgopen');render('pagine');}));root.querySelectorAll('[data-pgadd]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();pgNewPage(el.getAttribute('data-pgadd'));}));const nr=root.querySelector('[data-pgaddroot]');if(nr)nr.addEventListener('click',()=>pgNewPage(null));const em=root.querySelector('[data-pgemoji]');if(em)em.addEventListener('click',()=>{const v=prompt('Emoji della pagina:',PG.pages[PG.current].emoji||'📄');if(v!==null){PG.pages[PG.current].emoji=v.trim().slice(0,4)||'📄';render('pagine');}});root.querySelectorAll('[data-pgcheck]').forEach(el=>el.addEventListener('click',()=>{const b=pgFindBlock(el.getAttribute('data-pgcheck'));if(b){b.done=!b.done;render('pagine');}}));root.querySelectorAll('[data-pgdel]').forEach(el=>el.addEventListener('click',()=>{const p=PG.pages[PG.current];p.blocks=p.blocks.filter(b=>b.id!==el.getAttribute('data-pgdel'));render('pagine');}));root.querySelectorAll('[data-pgnew]').forEach(el=>el.addEventListener('click',()=>pgNewBlock(el.getAttribute('data-pgnew'))));root.querySelectorAll('[data-pgview]').forEach(el=>el.addEventListener('click',()=>{const[bid,view]=el.getAttribute('data-pgview').split('|');const b=pgFindBlock(bid);if(b){b.view=view;render('pagine');}}));root.querySelectorAll('[contenteditable="true"]').forEach(el=>{el.addEventListener('blur',()=>{const txt=el.innerText.trim();const kind=el.getAttribute('data-edit');if(kind==='pagetitle'){PG.pages[el.getAttribute('data-pid')].title=txt||'Senza titolo';render('pagine');}else if(kind==='text'){const b=pgFindBlock(el.getAttribute('data-bid'));if(b)b.text=txt;}});el.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();el.blur();}});});}
+function vPagine(){const p=PG.pages[PG.current]||PG.pages[PG.rootOrder[0]];
+  if(!p){return `<div class="nz-wrap"><aside class="nz-side card"><div class="nz-sidehead"><span class="nz-sidetitle">${icon('book')} Pagine</span><span class="btn ghost sm nz-newroot" data-pgaddroot="1">${icon('plus')} Nuova</span></div><div class="nz-tree"></div></aside><section class="nz-editor card"><div class="nz-empty">Nessuna pagina. Crea la prima pagina con "Nuova".</div></section></div>`;}
+  let crumbs=[],cur=p;while(cur){crumbs.unshift(cur);cur=cur.parent?PG.pages[cur.parent]:null;}const crumbHtml=crumbs.map((c,i)=>`<span class="nz-crumb" data-pgopen="${esc(c.id)}">${esc(c.emoji||'📄')} ${esc(c.title)}</span>${i<crumbs.length-1?'<span class="nz-crumbsep">/</span>':''}`).join('');const blocksHtml=p.blocks.map(pgRenderBlock).join('');return `<div class="nz-wrap"><aside class="nz-side card"><div class="nz-sidehead"><span class="nz-sidetitle">${icon('book')} Pagine</span><span class="btn ghost sm nz-newroot" data-pgaddroot="1">${icon('plus')} Nuova</span></div><div class="nz-tree">${pgTreeRows(null,0)}</div></aside><section class="nz-editor card"><div class="nz-crumbs">${crumbHtml}</div><div class="nz-pagehead"><span class="nz-pageemoji" data-pgemoji="${esc(p.id)}" title="Cambia emoji">${esc(p.emoji||'📄')}</span><div class="nz-pagetitle" contenteditable="true" data-edit="pagetitle" data-pid="${esc(p.id)}">${esc(p.title)}</div><span class="btn ghost sm" data-pgdelpage="1" title="Elimina pagina" style="color:var(--red)">${icon('warn')}</span></div><div class="nz-blocks">${blocksHtml||'<div class="nz-empty">Pagina vuota. Aggiungi un blocco qui sotto.</div>'}</div><div class="nz-addbar"><span class="nz-addbtn" data-pgnew="heading">${icon('plus')} Titolo</span><span class="nz-addbtn" data-pgnew="text">${icon('plus')} Testo</span><span class="nz-addbtn" data-pgnew="todo">${icon('plus')} To-do</span><span class="nz-addbtn" data-pgnew="bullet">${icon('plus')} Elenco</span>${pgBackendOn()?'':`<span class="nz-addbtn" data-pgnew="db">${icon('plus')} Database</span>`}</div></section></div>`;}
+function wirePagine(){const root=document.querySelector('.nz-wrap');if(!root)return;const backend=pgBackendOn();
+  root.querySelectorAll('[data-pgtoggle]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();const id=el.getAttribute('data-pgtoggle');PG.pages[id].open=!PG.pages[id].open;render('pagine');}));
+  root.querySelectorAll('[data-pgopen]').forEach(el=>el.addEventListener('click',async e=>{if(e.target.closest('[data-pgtoggle]')||e.target.closest('[data-pgadd]'))return;PG.current=el.getAttribute('data-pgopen');if(backend){try{await pgLoadPage(PG.current);}catch(err){toast('Errore: '+(err&&err.message?err.message:err));}}render('pagine');}));
+  root.querySelectorAll('[data-pgadd]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();pgNewPage(el.getAttribute('data-pgadd'));}));
+  const nr=root.querySelector('[data-pgaddroot]');if(nr)nr.addEventListener('click',()=>pgNewPage(null));
+  const em=root.querySelector('[data-pgemoji]');if(em)em.addEventListener('click',()=>{const cur=PG.pages[PG.current];if(!cur)return;const v=prompt('Emoji della pagina:',cur.emoji||'📄');if(v!==null){cur.emoji=v.trim().slice(0,4)||'📄';render('pagine');pgUpdatePageMeta(PG.current);}});
+  const dp=root.querySelector('[data-pgdelpage]');if(dp)dp.addEventListener('click',()=>{const cur=PG.pages[PG.current];if(!cur)return;if(!confirm('Eliminare la pagina "'+(cur.title||'Senza titolo')+'" e i suoi blocchi?'))return;if(backend){pgDeletePageBackend(PG.current);}else{const pid=PG.current;delete PG.pages[pid];PG.rootOrder=PG.rootOrder.filter(x=>x!==pid);Object.values(PG.pages).forEach(p=>{if(p.parent===pid)p.parent=null;});PG.current=PG.rootOrder[0]||Object.keys(PG.pages)[0]||null;render('pagine');}});
+  root.querySelectorAll('[data-pgcheck]').forEach(el=>el.addEventListener('click',()=>{const b=pgFindBlock(el.getAttribute('data-pgcheck'));if(b){b.done=!b.done;render('pagine');if(backend)pgSaveBlock(b.id,true);}}));
+  root.querySelectorAll('[data-pgdel]').forEach(el=>el.addEventListener('click',()=>{const bid=el.getAttribute('data-pgdel');if(backend){pgDeleteBlockBackend(bid);}else{const p=PG.pages[PG.current];p.blocks=p.blocks.filter(b=>b.id!==bid);render('pagine');}}));
+  root.querySelectorAll('[data-pgnew]').forEach(el=>el.addEventListener('click',()=>pgNewBlock(el.getAttribute('data-pgnew'))));
+  root.querySelectorAll('[data-pgview]').forEach(el=>el.addEventListener('click',()=>{const[bid,view]=el.getAttribute('data-pgview').split('|');const b=pgFindBlock(bid);if(b){b.view=view;render('pagine');}}));
+  root.querySelectorAll('[contenteditable="true"]').forEach(el=>{
+    el.addEventListener('input',()=>{const kind=el.getAttribute('data-edit');if(kind==='text'){const b=pgFindBlock(el.getAttribute('data-bid'));if(b){b.text=el.innerText;if(backend)pgSaveBlock(b.id,false);}}});
+    el.addEventListener('blur',()=>{const txt=el.innerText.trim();const kind=el.getAttribute('data-edit');if(kind==='pagetitle'){const pid=el.getAttribute('data-pid');PG.pages[pid].title=txt||'Senza titolo';if(backend)pgUpdatePageMeta(pid);render('pagine');}else if(kind==='text'){const b=pgFindBlock(el.getAttribute('data-bid'));if(b){b.text=txt;if(backend)pgSaveBlock(b.id,true);}}});
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();el.blur();}});
+  });
+}
 window.wirePagine=wirePagine;
 function pgFindBlock(bid){return (PG.pages[PG.current].blocks||[]).find(b=>b.id===bid);}
-function pgNewPage(parent){const id=pgUid('pg_');PG.pages[id]={id,parent,title:'Senza titolo',emoji:'📄',open:false,blocks:[{id:pgUid('b_'),type:'text',text:''}]};if(parent===null)PG.rootOrder.push(id);else PG.pages[parent].open=true;PG.current=id;render('pagine');}
-function pgNewBlock(type){const p=PG.pages[PG.current];let b;if(type==='heading')b={id:pgUid('b_'),type:'heading',text:'Nuovo titolo'};else if(type==='todo')b={id:pgUid('b_'),type:'todo',text:'Nuova attività',done:false};else if(type==='bullet')b={id:pgUid('b_'),type:'bullet',text:'Voce elenco'};else if(type==='db')b={id:pgUid('b_'),type:'db',view:'table',cols:['Nome','Cliente','Stato','Valore'],statusCol:2,rows:[{id:pgUid('r_'),cells:['Nuovo record','—','Da contattare','0']}]};else b={id:pgUid('b_'),type:'text',text:''};p.blocks.push(b);render('pagine');}
+async function pgNewPage(parent){
+  if(pgBackendOn()){
+    try{
+      const siblings=Object.values(PG.pages).filter(p=>p.parent===(parent||null));
+      const pos=siblings.length;
+      const newId=await rpc('crm_page_create',{p_title:'Senza titolo',p_icon:'📄',p_parent:parent||null,p_position:pos});
+      if(parent&&PG.pages[parent])PG.pages[parent].open=true;
+      await pgLoadTree();
+      if(newId)PG.current=String(newId);
+      await pgLoadPage(PG.current);
+      render('pagine');toast('Pagina creata');
+    }catch(e){toast('Errore creazione pagina: '+(e&&e.message?e.message:e));}
+    return;
+  }
+  const id=pgUid('pg_');PG.pages[id]={id,parent,title:'Senza titolo',emoji:'📄',open:false,blocks:[{id:pgUid('b_'),type:'text',text:''}]};if(parent===null)PG.rootOrder.push(id);else PG.pages[parent].open=true;PG.current=id;render('pagine');
+}
+async function pgNewBlock(type){
+  const p=PG.pages[PG.current];if(!p)return;
+  if(pgBackendOn()){
+    const dbtype=PG_UI_TO_DBTYPE[type]||'paragraph';
+    const defText=type==='heading'?'Nuovo titolo':type==='todo'?'Nuova attività':type==='bullet'?'Voce elenco':'';
+    const content=type==='todo'?{text:defText,checked:false}:{text:defText};
+    try{
+      const pos=(p.blocks||[]).length;
+      await rpc('crm_block_upsert',{p_id:null,p_page:p.id,p_type:dbtype,p_content:content,p_position:pos});
+      await pgLoadPage(p.id);render('pagine');
+    }catch(e){toast('Errore creazione blocco: '+(e&&e.message?e.message:e));}
+    return;
+  }
+  let b;if(type==='heading')b={id:pgUid('b_'),type:'heading',text:'Nuovo titolo'};else if(type==='todo')b={id:pgUid('b_'),type:'todo',text:'Nuova attività',done:false};else if(type==='bullet')b={id:pgUid('b_'),type:'bullet',text:'Voce elenco'};else if(type==='db')b={id:pgUid('b_'),type:'db',view:'table',cols:['Nome','Cliente','Stato','Valore'],statusCol:2,rows:[{id:pgUid('r_'),cells:['Nuovo record','—','Da contattare','0']}]};else b={id:pgUid('b_'),type:'text',text:''};p.blocks.push(b);render('pagine');
+}
+/* --- Persistenza blocchi (backend) con debounce sull'edit --- */
+const pgSaveTimers={};
+function pgSaveBlock(bid,immediate){
+  if(!pgBackendOn())return;
+  const b=pgFindBlock(bid);if(!b)return;
+  const doSave=async()=>{
+    try{
+      const content=b.type==='todo'?{text:b.text||'',checked:!!b.done}:{text:b.text||''};
+      await rpc('crm_block_upsert',{p_id:b.id,p_page:PG.current,p_type:b.dbtype||PG_UI_TO_DBTYPE[b.type]||'paragraph',p_content:content,p_position:b.position||0});
+    }catch(e){toast('Errore salvataggio blocco: '+(e&&e.message?e.message:e));}
+  };
+  if(immediate){clearTimeout(pgSaveTimers[bid]);doSave();return;}
+  clearTimeout(pgSaveTimers[bid]);
+  pgSaveTimers[bid]=setTimeout(doSave,700);
+}
+async function pgDeleteBlockBackend(bid){
+  try{await rpc('crm_block_delete',{p_id:bid});await pgLoadPage(PG.current);render('pagine');}
+  catch(e){toast('Errore eliminazione blocco: '+(e&&e.message?e.message:e));}
+}
+async function pgDeletePageBackend(pid){
+  try{
+    await rpc('crm_page_delete',{p_id:pid});
+    const wasCurrent=PG.current===pid;
+    await pgLoadTree();
+    if(wasCurrent)PG.current=PG.rootOrder[0]||null;
+    if(PG.current)await pgLoadPage(PG.current);
+    render('pagine');toast('Pagina eliminata');
+  }catch(e){toast('Errore eliminazione pagina: '+(e&&e.message?e.message:e));}
+}
+async function pgUpdatePageMeta(pid){
+  const p=PG.pages[pid];if(!p||!pgBackendOn())return;
+  try{await rpc('crm_page_update',{p_id:p.id,p_title:p.title||'Senza titolo',p_icon:p.emoji||'📄',p_parent:p.parent||null,p_position:p.position||0});}
+  catch(e){toast('Errore salvataggio pagina: '+(e&&e.message?e.message:e));}
+}
 
 /* ---------- SUPERADMIN ---------- */
 function vSuperadmin(){
