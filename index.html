@@ -361,6 +361,8 @@
     <div class="loginLogo"><div class="logo"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;stroke-width:2.2;fill:none"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg></div><b>NovaCRM</b></div>
     <h2>Accedi al tuo CRM</h2>
     <div class="lsub">Entra nel tuo workspace o prova la demo.</div>
+    <button class="btn ghost lbtn" onclick="googleLogin()" style="gap:10px;margin-top:0"><svg width="17" height="17" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.6 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5 43.5 34.8 43.5 24c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.5 29.6 4.5 24 4.5 16.3 4.5 9.7 8.9 6.3 14.7z"/><path fill="#4CAF50" d="M24 43.5c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 34.6 26.7 35.5 24 35.5c-5.3 0-9.7-3.1-11.3-7.5l-6.5 5C9.6 39 16.2 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.2 36.5 43.5 30.9 43.5 24c0-1.2-.1-2.3-.4-3.5z"/></svg>Continua con Google</button>
+    <div class="ldiv"><span>oppure con email</span></div>
     <div class="ff"><label>Email</label><input id="l_email" type="email" value="demo@novacrm.it" autocomplete="username"></div>
     <div class="ff"><label>Password</label><input id="l_pwd" type="password" value="Demo1234!" autocomplete="current-password"></div>
     <div id="l_msg" class="lmsg"></div>
@@ -831,8 +833,12 @@ async function doSignup(){
   }catch(e){m.style.color='var(--red)';m.textContent='Registrazione fallita: '+e.message;}
 }
 function demoMode(){mode='demo';token=SUPA.key;startApp();}
+function googleLogin(){const redirect=encodeURIComponent(location.origin+location.pathname);location.href=SUPA.url+'/auth/v1/authorize?provider=google&redirect_to='+redirect;}
+function emailFromJwt(t){try{const p=JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return p.email||'';}catch(e){return '';}}
 function logout(){localStorage.removeItem('nova_token');localStorage.removeItem('nova_email');location.reload();}
 (function boot(){
+  const hp=new URLSearchParams(location.hash.slice(1));
+  if(hp.get('access_token')){token=hp.get('access_token');mode='auth';localStorage.setItem('nova_token',token);const em=emailFromJwt(token);if(em)localStorage.setItem('nova_email',em);history.replaceState(null,'',location.pathname+location.search);startApp();return;}
   const saved=localStorage.getItem('nova_token');
   if(saved){token=saved;mode='auth';startApp();}else{showLogin();}
 })();
