@@ -653,7 +653,7 @@ const DATA={
 };
 
 const TITLES={dashboard:'Dashboard',contatti:'Contatti',aziende:'Aziende',trattative:'Trattative',attivita:'Attività',calendario:'Calendario',email:'Email',messaggi:'SMS / WhatsApp',chiamate:'Chiamate',social:'Social',webform:'Web Form',campagne:'Campagne email',sequenze:'Sequenze',workflow:'Workflow',blueprint:'Blueprint',ticket:'Ticket',knowledge:'Knowledge Base',centro:'Centro Assistenza',report:'Report',moduli:'Moduli personalizzati',ruoli:'Ruoli e permessi',audit:'Audit log',marketplace:'Marketplace & API',mobile:'App mobile',organizzazione:'Organizzazione',pagine:'Pagine',superadmin:'Superadmin'};
-const SUBS={dashboard:'Panoramica delle vendite e delle attività',contatti:'Tutte le persone con cui sei in contatto',aziende:'Le organizzazioni nel tuo portfolio',trattative:'Pipeline di vendita per stadio',attivita:'Compiti e promemoria',calendario:'Agenda e prenotazioni',email:'Casella collegata con riepilogo AI',messaggi:'Messaggistica diretta coi contatti',chiamate:'Registro chiamate e telefonia',social:'Interazioni social dei contatti',webform:'Moduli per acquisire lead dal sito',campagne:'Email marketing e tracciamento',sequenze:'Cadenze email automatiche',workflow:'Automazioni basate su eventi',blueprint:'Processi di vendita guidati',ticket:'Help desk e gestione richieste',knowledge:'Articoli di auto-aiuto per i clienti',centro:'Portale clienti e widget di supporto',report:'Analisi, performance e previsioni',moduli:'Personalizza moduli e campi',ruoli:'Permessi e controllo accessi',audit:'Registro delle azioni sensibili',marketplace:'Integrazioni e API',mobile:'App native iOS e Android',organizzazione:'Analisi per area di business e marketing',pagine:'Spazio di lavoro in stile Notion',superadmin:'Gestione organizzazioni, utenti e ruoli'};
+const SUBS={dashboard:'Panoramica delle vendite e delle attività',contatti:'Tutte le persone con cui sei in contatto',aziende:'Le organizzazioni nel tuo portfolio',trattative:'Pipeline di vendita per stadio',attivita:'Compiti e promemoria',calendario:'Agenda e prenotazioni',email:'Casella collegata con riepilogo AI',messaggi:'Messaggistica diretta coi contatti',chiamate:'Registro chiamate e telefonia',social:'Interazioni social dei contatti',webform:'Moduli per acquisire lead dal sito',campagne:'Email marketing e tracciamento',sequenze:'Cadenze email automatiche',workflow:'Automazioni basate su eventi',blueprint:'Processi di vendita guidati',ticket:'Help desk e gestione richieste',knowledge:'Articoli di auto-aiuto per i clienti',centro:'Portale clienti e widget di supporto',report:'Analisi, performance e previsioni',moduli:'Personalizza moduli e campi',ruoli:'Permessi e controllo accessi',audit:'Registro delle azioni sensibili',marketplace:'Integrazioni e API',mobile:'App native iOS e Android',organizzazione:'Analisi per area di business e marketing',pagine:'Spazio di lavoro in stile Notion',superadmin:'Gestione organizzazioni, utenti e ruoli',mod_segretario:'Scadenze e promemoria automatici',mod_signature:'Richieste di firma digitale'};
 
 let mailSel=0, chatSel=0, pipeSel=0, current='dashboard';
 /* Moduli abilitati per il tenant dell'utente loggato (null = non ancora caricati / non applicabile in demo) */
@@ -715,7 +715,7 @@ function render(view){
   c.classList.remove('view');void c.offsetWidth;c.classList.add('view');
   if(orgIdx!==0){c.innerHTML=tenantEmpty();return;}
   const VIEWS={dashboard:vDashboard,contatti:vContatti,aziende:vAziende,trattative:vTrattative,attivita:vAttivita,calendario:vCalendario,email:vEmail,messaggi:vMessaggi,chiamate:vChiamate,social:vSocial,webform:vWebform,campagne:vCampagne,sequenze:vSequenze,workflow:vWorkflow,blueprint:vBlueprint,ticket:vTicket,knowledge:vKnowledge,centro:vCentro,report:vReport,moduli:vModuli,ruoli:vRuoli,audit:vAudit,marketplace:vMarketplace,mobile:vMobile,organizzazione:vOrg,pagine:vPagine,superadmin:vSuperadmin,
-    mod_calendar:vModPlaceholder,mod_email:vModPlaceholder,mod_signature:vModPlaceholder,mod_segretario:vModPlaceholder,mod_wealthview:vModPlaceholder,mod_none:vNoModule};
+    mod_calendar:vModPlaceholder,mod_email:vModPlaceholder,mod_signature:vSignature,mod_segretario:vSegretario,mod_wealthview:vModPlaceholder,mod_none:vNoModule};
   const fn=VIEWS[view]||vDashboard;
   c.innerHTML=fn(view);
   if(view==='trattative')wireDnd();
@@ -725,6 +725,8 @@ function render(view){
   if(view==='organizzazione'&&window.wireOrg)window.wireOrg();
   if(view==='superadmin'&&window.wireSuperadmin)window.wireSuperadmin();
   if(view==='attivita')wireAtt();
+  if(view==='mod_segretario'&&window.segLoad)window.segLoad();
+  if(view==='mod_signature'&&window.signLoad)window.signLoad();
 }
 function tenantEmpty(){return note(`<b>Isolamento multi-tenant.</b> Stai vedendo il workspace di <b>${ORGS[orgIdx]}</b>, un altro cliente. Dati separati tramite Row Level Security. Torna a "Rossi Costruzioni" per la demo.`)+`<div class="empty">Nessun dato demo per questo workspace.</div>`;}
 function sp(s){const m={lead:['lead','Lead'],qual:['qual','Qualificato'],cli:['cli','Cliente'],cold:['cold','Freddo']};const[c,l]=m[s];return `<span class="pill ${c}">${l}</span>`;}
@@ -1339,6 +1341,260 @@ function vSuperadmin(){
 }
 function wireSuperadmin(){ if(!isSuperadmin())return; saLoadOrgs(); saLoadModules(); }
 window.wireSuperadmin=wireSuperadmin;
+
+/* ===================== MODULO SEGRETARIO: SCADENZARIO ===================== */
+/* Stato locale della vista Scadenzario */
+const SEG={ filter:'all', items:[] };
+const SEG_REC={none:'Nessuna',monthly:'Mensile',quarterly:'Trimestrale',semiannual:'Semestrale',yearly:'Annuale',custom:'Personalizzata'};
+function segRecLbl(r){return SEG_REC[r]||esc(r||'Nessuna');}
+function segErr(e){return e&&e.message?e.message:String(e);}
+/* Giorni mancanti alla scadenza (negativo = già scaduta) */
+function segDaysLeft(due){
+  if(!due)return null;
+  const d=new Date(due+'T00:00:00');const now=new Date();now.setHours(0,0,0,0);
+  if(isNaN(d))return null;
+  return Math.round((d-now)/86400000);
+}
+function segDueBadge(due,status){
+  const dl=segDaysLeft(due);
+  if(status==='done')return '<span class="pill grn">Fatta</span>';
+  if(dl===null)return '<span class="pill cold">—</span>';
+  if(dl<0)return `<span class="pill red">Scaduta · ${esc(String(-dl))}g fa</span>`;
+  if(dl===0)return '<span class="pill amb">Scade oggi</span>';
+  if(dl<=7)return `<span class="pill amb">Tra ${esc(String(dl))}g</span>`;
+  return `<span class="pill cold">Tra ${esc(String(dl))}g</span>`;
+}
+function vSegretario(){
+  if(mode!=='auth'){
+    return note('<b>Scadenzario — disponibile dopo l’accesso.</b> Accedi al tuo workspace per gestire le scadenze. In modalità demo questa funzione non è attiva.');
+  }
+  const f=SEG.filter;
+  const tabs=[['all','Tutte'],['open','Aperte'],['done','Fatte']].map(([k,l])=>
+    `<div class="tab ${f===k?'active':''}" onclick="segSetFilter('${k}')">${l}</div>`).join('');
+  return note('<b>Scadenzario.</b> Tieni traccia delle scadenze ricorrenti e una tantum, con promemoria automatici. Segna come fatte (con rinnovo se ricorrenti) o eliminale.')+
+  `<div class="grid2" style="align-items:start">
+    <div>
+      <div class="tabs">${tabs}</div>
+      <div class="tablecard" id="segList"><div class="empty">Caricamento…</div></div>
+    </div>
+    <div class="card">
+      <h3>Nuova scadenza</h3>
+      <div class="ff"><label>Titolo *</label><input id="seg_title" placeholder="es. Rinnovo PEC"></div>
+      <div class="ff"><label>Data di scadenza *</label><input id="seg_due" type="date"></div>
+      <div class="ff"><label>Categoria</label><input id="seg_cat" placeholder="es. Fiscale, Contratti…"></div>
+      <div class="ff"><label>Ricorrenza</label><select id="seg_rec">
+        <option value="none">Nessuna</option>
+        <option value="monthly">Mensile</option>
+        <option value="quarterly">Trimestrale</option>
+        <option value="semiannual">Semestrale</option>
+        <option value="yearly">Annuale</option>
+        <option value="custom">Personalizzata</option>
+      </select></div>
+      <div class="ff"><label>Note</label><input id="seg_desc" placeholder="Dettagli (facoltativi)"></div>
+      <div class="ff"><label>Promemoria (giorni prima, separati da virgola)</label><input id="seg_notify" value="30,7,1" placeholder="30,7,1"></div>
+      <div id="seg_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="segCreate()">${icon('plus')}Crea scadenza</button>
+    </div>
+  </div>`;
+}
+function segSetFilter(f){SEG.filter=f;render('mod_segretario');}
+window.segLoad=async function(){
+  if(mode!=='auth')return;
+  const el=document.getElementById('segList');if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  const pStatus = SEG.filter==='open' ? 'open' : null; // 'fatte' e 'tutte' filtrate lato client
+  try{
+    const data=await rpc('seg_deadlines_list',{p_status:pStatus});
+    let items=Array.isArray(data)?data:(data?[data]:[]);
+    if(SEG.filter==='done')items=items.filter(x=>x.status==='done');
+    // Ordina: prima le aperte per data di scadenza crescente, poi le fatte.
+    items.sort((a,b)=>{
+      const ad=a.status==='done'?1:0, bd=b.status==='done'?1:0;
+      if(ad!==bd)return ad-bd;
+      return String(a.due_date||'').localeCompare(String(b.due_date||''));
+    });
+    SEG.items=items;
+    el.innerHTML=segRows(items);
+  }catch(e){
+    el.innerHTML=`<div class="empty">Impossibile caricare lo scadenzario.</div>`;
+    toast('Errore: '+segErr(e));
+  }
+};
+function segRows(items){
+  if(!items.length)return '<div class="empty">Nessuna scadenza per questo filtro.</div>';
+  const rows=items.map(it=>{
+    const id=esc(String(it.id||''));
+    const done=it.status==='done';
+    const notify=Array.isArray(it.notify_days)?it.notify_days.join(', '):'';
+    const doneBtn=done?'':`<button class="btn ghost sm" title="Segna fatta" onclick="event.stopPropagation();segDone('${id}','${esc(it.recurrence||'none')}')" style="color:var(--green)">${icon('check')}</button>`;
+    const delBtn=`<button class="btn ghost sm" title="Elimina" onclick="event.stopPropagation();segDelete('${id}','${esc(it.title||'')}')" style="color:var(--red)">${icon('warn')}</button>`;
+    return `<tr>
+      <td><b>${esc(it.title||'—')}</b>${it.description?`<div style="color:var(--text-3);font-size:12px;margin-top:2px">${esc(it.description)}</div>`:''}</td>
+      <td>${it.category?`<span class="pill blu plain" style="font-size:11px">${esc(it.category)}</span>`:'<span style="color:var(--text-3)">—</span>'}</td>
+      <td>${esc(it.due_date||'—')}</td>
+      <td><span class="pill cold" style="font-size:11px">${segRecLbl(it.recurrence)}</span></td>
+      <td>${segDueBadge(it.due_date,it.status)}</td>
+      <td style="color:var(--text-3);font-size:12px">${notify?esc(notify):'—'}</td>
+      <td style="text-align:right;white-space:nowrap">${doneBtn} ${delBtn}</td>
+    </tr>`;
+  }).join('');
+  return `<table><thead><tr><th>Scadenza</th><th>Categoria</th><th>Data</th><th>Ricorrenza</th><th>Stato</th><th>Promemoria</th><th style="text-align:right">Azioni</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function segParseNotify(raw){
+  return String(raw||'').split(',').map(s=>parseInt(s.trim(),10)).filter(n=>Number.isFinite(n)&&n>=0);
+}
+async function segCreate(){
+  const msg=document.getElementById('seg_msg');
+  const title=gv('seg_title'), due=gv('seg_due');
+  if(!title){msg.style.color='var(--red)';msg.textContent='Il titolo è obbligatorio.';return;}
+  if(!due){msg.style.color='var(--red)';msg.textContent='La data di scadenza è obbligatoria.';return;}
+  const notify=segParseNotify(gv('seg_notify'));
+  const args={
+    p_title:title,
+    p_due_date:due,
+    p_description:gv('seg_desc')||null,
+    p_category:gv('seg_cat')||null,
+    p_recurrence:gv('seg_rec')||'none',
+    p_notify_days:notify.length?notify:[30,7,1]
+  };
+  try{
+    msg.style.color='var(--text-3)';msg.textContent='Salvataggio…';
+    await rpc('seg_deadline_create',args);
+    toast('Scadenza creata');
+    render('mod_segretario');
+  }catch(e){
+    msg.style.color='var(--red)';msg.textContent='Errore: '+segErr(e);
+    toast('Errore: '+segErr(e));
+  }
+}
+async function segDone(id,recurrence){
+  if(!id)return;
+  const rollover = recurrence && recurrence!=='none';
+  try{
+    const next=await rpc('seg_deadline_done',{p_id:id,p_rollover:rollover});
+    toast(rollover&&next?'Fatta · creata la prossima occorrenza':'Scadenza completata');
+    window.segLoad();
+  }catch(e){toast('Errore: '+segErr(e));}
+}
+async function segDelete(id,label){
+  if(!id)return;
+  if(!confirm('Eliminare '+(label||'questa scadenza')+'? L\'operazione non è reversibile.'))return;
+  try{
+    await rpc('seg_deadline_delete',{p_id:id});
+    toast('Scadenza eliminata');
+    window.segLoad();
+  }catch(e){
+    const m=segErr(e);
+    toast(/admin|permess|denied|negato/i.test(m)?'Solo un admin può eliminare le scadenze':('Errore: '+m));
+  }
+}
+
+/* ===================== MODULO FIRMA DIGITALE ===================== */
+const SIGN={ filter:'all', items:[] };
+const SIGN_STATUS={
+  draft:['cold','Bozza'], sent:['blu','Inviata'], viewed:['amb','Visualizzata'],
+  signed:['grn','Firmata'], declined:['red','Rifiutata'], expired:['red','Scaduta'], canceled:['cold','Annullata']
+};
+function signStatusBadge(s){const m=SIGN_STATUS[s];if(!m)return `<span class="pill cold">${esc(s||'—')}</span>`;return `<span class="pill ${m[0]}">${esc(m[1])}</span>`;}
+function signFmtDate(d){if(!d)return '—';const dt=new Date(d);return isNaN(dt)?esc(String(d)):dt.toLocaleDateString('it-IT');}
+function vSignature(){
+  if(mode!=='auth'){
+    return note('<b>Firma digitale — disponibile dopo l’accesso.</b> Accedi al tuo workspace per creare e gestire le richieste di firma. In modalità demo questa funzione non è attiva.');
+  }
+  const f=SIGN.filter;
+  const tabs=[['all','Tutte'],['draft','Bozze'],['sent','Inviate'],['signed','Firmate']].map(([k,l])=>
+    `<div class="tab ${f===k?'active':''}" onclick="signSetFilter('${k}')">${l}</div>`).join('');
+  return note('<b>Firma digitale.</b> Crea richieste di firma come bozze. L’invio effettivo al fornitore (Zoho) avverrà tramite la edge function in arrivo.')+
+  `<div class="grid2" style="align-items:start">
+    <div>
+      <div class="tabs">${tabs}</div>
+      <div class="tablecard" id="signList"><div class="empty">Caricamento…</div></div>
+    </div>
+    <div class="card">
+      <h3>Nuova richiesta di firma</h3>
+      <div class="ff"><label>Titolo *</label><input id="sg_title" placeholder="es. Contratto di mandato"></div>
+      <div class="ff"><label>Nome firmatario *</label><input id="sg_name" placeholder="Mario Rossi"></div>
+      <div class="ff"><label>Email firmatario *</label><input id="sg_email" type="email" placeholder="mario@azienda.it"></div>
+      <div class="ff"><label>URL documento</label><input id="sg_url" placeholder="https://… (PDF da firmare)"></div>
+      <div style="text-align:center;color:var(--text-3);font-size:12px;margin:2px 0 10px">— oppure —</div>
+      <div class="ff"><label>Testo del documento</label><input id="sg_text" placeholder="Incolla qui il testo del documento"></div>
+      <div id="sg_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="signCreate()">${icon('plus')}Crea bozza</button>
+    </div>
+  </div>`;
+}
+function signSetFilter(f){SIGN.filter=f;render('mod_signature');}
+window.signLoad=async function(){
+  if(mode!=='auth')return;
+  const el=document.getElementById('signList');if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  const pStatus = (SIGN.filter==='all') ? null : SIGN.filter;
+  try{
+    const data=await rpc('seg_sign_list',{p_status:pStatus});
+    let items=Array.isArray(data)?data:(data?[data]:[]);
+    items.sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+    SIGN.items=items;
+    el.innerHTML=signRows(items);
+  }catch(e){
+    el.innerHTML='<div class="empty">Impossibile caricare le richieste di firma.</div>';
+    toast('Errore: '+segErr(e));
+  }
+};
+function signRows(items){
+  if(!items.length)return '<div class="empty">Nessuna richiesta di firma per questo filtro.</div>';
+  const cancelable={draft:1,sent:1,viewed:1};
+  const rows=items.map(it=>{
+    const id=esc(String(it.id||''));
+    const date=it.signed_at||it.sent_at||it.created_at;
+    let actions='';
+    if(it.status==='draft'){
+      actions+=`<button class="btn sm" title="Invia per firma" onclick="event.stopPropagation();signSend('${id}')">${icon('send')}Invia</button> `;
+    }
+    if(cancelable[it.status]){
+      actions+=`<button class="btn ghost sm" title="Annulla" onclick="event.stopPropagation();signCancel('${id}','${esc(it.title||'')}')" style="color:var(--red)">${icon('warn')}</button>`;
+    }
+    return `<tr>
+      <td><b>${esc(it.title||'—')}</b>${it.provider?`<div style="color:var(--text-3);font-size:12px;margin-top:2px">${esc(it.provider)}</div>`:''}</td>
+      <td>${esc(it.signer_name||'—')}<div style="color:var(--text-3);font-size:12px">${esc(it.signer_email||'')}</div></td>
+      <td>${signStatusBadge(it.status)}</td>
+      <td style="color:var(--text-3)">${signFmtDate(date)}</td>
+      <td style="text-align:right;white-space:nowrap">${actions||'<span style="color:var(--text-3)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `<table><thead><tr><th>Documento</th><th>Firmatario</th><th>Stato</th><th>Data</th><th style="text-align:right">Azioni</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function signCreate(){
+  const msg=document.getElementById('sg_msg');
+  const title=gv('sg_title'), name=gv('sg_name'), email=gv('sg_email');
+  const url=gv('sg_url'), text=gv('sg_text');
+  if(!title||!name||!email){msg.style.color='var(--red)';msg.textContent='Titolo, nome ed email del firmatario sono obbligatori.';return;}
+  if(!url&&!text){msg.style.color='var(--red)';msg.textContent='Indica un URL documento oppure il testo del documento.';return;}
+  try{
+    msg.style.color='var(--text-3)';msg.textContent='Creazione bozza…';
+    await rpc('seg_sign_create',{p_title:title,p_signer_name:name,p_signer_email:email,p_document_url:url||null,p_document_text:text||null});
+    toast('Bozza di firma creata');
+    render('mod_signature');
+  }catch(e){
+    msg.style.color='var(--red)';msg.textContent='Errore: '+segErr(e);
+    toast('Errore: '+segErr(e));
+  }
+}
+function signSend(id){
+  // L'invio effettivo a Zoho avverrà tramite edge function (non ancora pronta).
+  toast('Invio Zoho in arrivo (configurazione edge function)');
+}
+async function signCancel(id,label){
+  if(!id)return;
+  if(!confirm('Annullare la richiesta '+(label||'di firma')+'?'))return;
+  try{
+    await rpc('seg_sign_cancel',{p_id:id});
+    toast('Richiesta annullata');
+    window.signLoad();
+  }catch(e){
+    const m=segErr(e);
+    toast(/admin|permess|denied|negato/i.test(m)?'Permesso negato':('Errore: '+m));
+  }
+}
 
 /* --- Catalogo moduli multi-tenant --- */
 const MODULES=[
