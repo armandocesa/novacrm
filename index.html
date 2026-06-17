@@ -656,6 +656,8 @@ const TITLES={dashboard:'Dashboard',contatti:'Contatti',aziende:'Aziende',tratta
 const SUBS={dashboard:'Panoramica delle vendite e delle attività',contatti:'Tutte le persone con cui sei in contatto',aziende:'Le organizzazioni nel tuo portfolio',trattative:'Pipeline di vendita per stadio',attivita:'Compiti e promemoria',calendario:'Agenda e prenotazioni',email:'Casella collegata con riepilogo AI',messaggi:'Messaggistica diretta coi contatti',chiamate:'Registro chiamate e telefonia',social:'Interazioni social dei contatti',webform:'Moduli per acquisire lead dal sito',campagne:'Email marketing e tracciamento',sequenze:'Cadenze email automatiche',workflow:'Automazioni basate su eventi',blueprint:'Processi di vendita guidati',ticket:'Help desk e gestione richieste',knowledge:'Articoli di auto-aiuto per i clienti',centro:'Portale clienti e widget di supporto',report:'Analisi, performance e previsioni',moduli:'Personalizza moduli e campi',ruoli:'Permessi e controllo accessi',audit:'Registro delle azioni sensibili',marketplace:'Integrazioni e API',mobile:'App native iOS e Android',organizzazione:'Analisi per area di business e marketing',pagine:'Spazio di lavoro in stile Notion',superadmin:'Gestione organizzazioni, utenti e ruoli'};
 
 let mailSel=0, chatSel=0, pipeSel=0, current='dashboard';
+/* Moduli abilitati per il tenant dell'utente loggato (null = non ancora caricati / non applicabile in demo) */
+let myModules=null;
 
 /* ===== INIT CHROME ===== */
 function renderSidebar(){
@@ -668,7 +670,24 @@ function renderSidebar(){
   syncThemeBtn();
   document.getElementById('sbxbanner').innerHTML=icon('warn')+'<span>Modalità Sandbox attiva — stai lavorando su una copia di test. Le modifiche non toccano i dati reali.</span>';
   let h='';
-  const groups=NAV.slice();
+  const groups=[];
+  // Shell a moduli: solo in modalità auth con i moduli del tenant caricati.
+  // In demo (o se i moduli non sono disponibili) si mostra tutto il CRM come prima.
+  const moduleShell = (mode==='auth' && Array.isArray(myModules));
+  if(moduleShell){
+    const enabled = myModules; // es. ['crm','calendar',...]
+    // Gruppo "Moduli": una voce per ogni modulo NON-CRM abilitato (apre un placeholder).
+    // Il CRM, se abilitato, viene rappresentato direttamente dai suoi silos (i gruppi NAV).
+    const modItems = MODULES.filter(m=>m.key!=='crm' && enabled.includes(m.key))
+      .map(m=>['mod_'+m.key, m.ic, m.label]);
+    if(modItems.length) groups.push({g:'Moduli', items:modItems});
+    // Se il CRM è abilitato, mostra le sue viste (i silos esistenti: vendite, marketing, ecc.).
+    if(enabled.includes('crm')) NAV.forEach(grp=>groups.push(grp));
+    // Nessun modulo abilitato del tutto.
+    if(!modItems.length && !enabled.includes('crm')) groups.push({g:'Moduli', items:[['mod_none','info','Nessun modulo']]});
+  }else{
+    NAV.forEach(grp=>groups.push(grp));
+  }
   if(isSuperadmin())groups.push({g:'Amministrazione',items:[['superadmin','shield','Superadmin']]});
   groups.forEach(grp=>{
     h+=`<div class="navgroup">${grp.g}</div>`;
@@ -688,13 +707,17 @@ function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.datase
 function syncThemeBtn(){document.getElementById('themeBtn').innerHTML=icon(document.documentElement.dataset.theme==='dark'?'sun':'moon');}
 
 function render(view){
-  document.getElementById('pageTitle').textContent=TITLES[view];
-  document.getElementById('pageSub').textContent=SUBS[view]||'';
+  const modKey = view && view.indexOf('mod_')===0 ? view.slice(4) : null;
+  document.getElementById('pageTitle').textContent=TITLES[view] || (modKey&&MODULE_LABEL[modKey]) || (modKey==='none'?'Moduli':'Dashboard');
+  document.getElementById('pageSub').textContent=SUBS[view] || (modKey&&modKey!=='none'?'Modulo del tuo workspace':'');
   const wrap=document.querySelector('.content');
   const c=document.getElementById('content');
   c.classList.remove('view');void c.offsetWidth;c.classList.add('view');
   if(orgIdx!==0){c.innerHTML=tenantEmpty();return;}
-  c.innerHTML=({dashboard:vDashboard,contatti:vContatti,aziende:vAziende,trattative:vTrattative,attivita:vAttivita,calendario:vCalendario,email:vEmail,messaggi:vMessaggi,chiamate:vChiamate,social:vSocial,webform:vWebform,campagne:vCampagne,sequenze:vSequenze,workflow:vWorkflow,blueprint:vBlueprint,ticket:vTicket,knowledge:vKnowledge,centro:vCentro,report:vReport,moduli:vModuli,ruoli:vRuoli,audit:vAudit,marketplace:vMarketplace,mobile:vMobile,organizzazione:vOrg,pagine:vPagine,superadmin:vSuperadmin}[view])();
+  const VIEWS={dashboard:vDashboard,contatti:vContatti,aziende:vAziende,trattative:vTrattative,attivita:vAttivita,calendario:vCalendario,email:vEmail,messaggi:vMessaggi,chiamate:vChiamate,social:vSocial,webform:vWebform,campagne:vCampagne,sequenze:vSequenze,workflow:vWorkflow,blueprint:vBlueprint,ticket:vTicket,knowledge:vKnowledge,centro:vCentro,report:vReport,moduli:vModuli,ruoli:vRuoli,audit:vAudit,marketplace:vMarketplace,mobile:vMobile,organizzazione:vOrg,pagine:vPagine,superadmin:vSuperadmin,
+    mod_calendar:vModPlaceholder,mod_email:vModPlaceholder,mod_signature:vModPlaceholder,mod_segretario:vModPlaceholder,mod_wealthview:vModPlaceholder,mod_none:vNoModule};
+  const fn=VIEWS[view]||vDashboard;
+  c.innerHTML=fn(view);
   if(view==='trattative')wireDnd();
   if(view==='email')wireMail();
   if(view==='messaggi')wireChat();
@@ -808,6 +831,28 @@ function vModuli(){
   <button class="btn">${icon('plus')}Crea modulo personalizzato</button>
   <div class="card" style="margin-top:20px"><h3>Campi del modulo "Cantieri"</h3><div class="actlist">${[['Nome cantiere','Testo'],['Indirizzo','Testo'],['Data inizio','Data'],['Stato avanzamento','Menu a tendina'],['Budget','Valuta'],['Responsabile','Lookup → Contatti'],['Foto','Allegato']].map(([n,t])=>`<div class="actrow"><span style="font-weight:600;min-width:180px">${n}</span><span class="pill blu plain" style="font-size:11px">${t}</span></div>`).join('')}</div><button class="btn sm ghost" style="margin-top:12px">${icon('plus')}Aggiungi campo</button></div>`;
 }
+/* ===== MODULI MULTI-TENANT: placeholder "in arrivo" ===== */
+function vModPlaceholder(view){
+  const key=(view||'').slice(4);
+  const m=MODULES.find(x=>x.key===key)||{label:key,ic:'puzzle'};
+  const lbl=esc(m.label);
+  let extra='';
+  if(key==='wealthview'){
+    extra=`<div style="margin-top:18px"><a class="btn" href="https://wealthview-iota.vercel.app" target="_blank" rel="noopener noreferrer">${icon('arrowUpRight')}Apri WealthView</a></div>`;
+  }
+  return note(`<b>Modulo ${lbl} — in arrivo.</b> Questo modulo è abilitato per il tuo workspace ma non è ancora disponibile in questa interfaccia.`)+
+  `<div class="card" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:48px 24px;gap:14px">
+     <div class="kbi" style="width:64px;height:64px;border-radius:16px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)">${icon(m.ic,'ico')}</div>
+     <div style="font-size:18px;font-weight:700">${lbl}</div>
+     <div style="color:var(--text-3);font-size:13.5px;max-width:420px;line-height:1.6">Stiamo costruendo questa esperienza. Tornerà presto con tutte le funzionalità.</div>
+     ${extra}
+   </div>`;
+}
+function vNoModule(){
+  return note(`<b>Nessun modulo attivo.</b> Il tuo workspace non ha ancora moduli abilitati. Contatta l’amministratore per richiedere l’attivazione.`)+
+  `<div class="empty">Nessun modulo disponibile.</div>`;
+}
+
 function vRuoli(){
   return note(`<b>Ruoli e permessi granulari.</b> Definisci chi vede e modifica cosa. Le regole di condivisione seguono la gerarchia aziendale. Essenziale per sicurezza e GDPR.`)+
   `<div class="tablecard"><div class="rolhead"><div>Ruolo</div><div>Contatti</div><div>Trattative</div><div>Config.</div><div>Export</div></div>${DATA.ruoli.map(r=>`<div class="rolrow"><div>${r.r}</div><div>${cell(r.contatti)}</div><div>${cell(r.trattative)}</div><div>${cell(r.config)}</div><div>${cell(r.export)}</div></div>`).join('')}</div>
@@ -876,7 +921,10 @@ async function loadData(){
   try{
     lab.textContent='Connessione…';
     let d;
-    if(mode==='auth'){ d=await rpc('crm_me'); if(!d||!d.org){ noAccess(); return; } }
+    if(mode==='auth'){
+      d=await rpc('crm_me'); if(!d||!d.org){ noAccess(); return; }
+      await loadMyModules();
+    }
     else { d=await rpc('crm_demo'); }
     applyData(d);
     live=true;
@@ -890,6 +938,36 @@ async function loadData(){
     console.warn('Supabase non raggiungibile, uso i dati di esempio integrati:',e.message);
   }
 }
+/* --- Moduli del tenant dell'utente (shell a moduli) --- */
+async function loadMyModules(){
+  try{
+    const data=await rpc('crm_my_modules',{});
+    const rows=Array.isArray(data)?data:(data?[data]:[]);
+    // Tiene solo i moduli effettivamente abilitati, nell'ordine del catalogo.
+    const enabledSet=new Set(rows.filter(r=>r&&(r.enabled===undefined||r.enabled)).map(r=>String(r.module)));
+    myModules=MODULE_ORDER.filter(k=>enabledSet.has(k));
+  }catch(e){
+    // In caso di errore non blocchiamo l'app: mostriamo comunque il CRM completo.
+    console.warn('crm_my_modules non disponibile, mostro il CRM completo:',e.message);
+    myModules=null;
+  }
+  // Ricostruisce il menu in base ai moduli abilitati.
+  if(appStarted)renderSidebar();
+  // Se la vista corrente non è raggiungibile, vai alla prima voce disponibile.
+  if(Array.isArray(myModules)){
+    const reachable=new Set();
+    if(myModules.includes('crm')){ NAV.forEach(g=>g.items.forEach(it=>reachable.add(it[0]))); }
+    myModules.forEach(k=>{ if(k!=='crm')reachable.add('mod_'+k); });
+    if(isSuperadmin())reachable.add('superadmin');
+    if(!myModules.length)reachable.add('mod_none');
+    if(!reachable.has(current)){
+      current = myModules.includes('crm') ? 'dashboard'
+              : (myModules.length ? 'mod_'+myModules.find(k=>k!=='crm') : 'mod_none');
+      document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',n.dataset.view===current));
+    }
+  }
+}
+
 /* --- Nuovo contatto (scrive su Supabase) --- */
 function openNew(){
   document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div>
@@ -995,10 +1073,71 @@ function vSuperadmin(){
     <div class="card"><div class="sa-head">${icon('building')}<h3>Organizzazioni</h3><button class="btn ghost sm" onclick="saLoadOrgs()">${icon('settings')}Aggiorna</button></div><p class="sa-sub">Elenco delle organizzazioni gestite.</p><div class="tablecard" id="saOrgsWrap"><div class="callout">Caricamento…</div></div></div>
     <div class="card"><div class="sa-head">${icon('users')}<h3>Utenti e ruoli</h3></div><p class="sa-sub">Invita o aggiorna un utente in un’organizzazione (nome org, es. "ac").</p><div class="ff"><label>Email utente</label><input id="saMemEmail" type="email" placeholder="nome@dominio.it"></div><div class="ff"><label>Organizzazione (nome)</label><input id="saMemOrg" type="text" placeholder="es. ac"></div><div class="ff"><label>Ruolo</label><select id="saMemRole">${roleOpts}</select></div><button class="btn" onclick="saSetMember()">${icon('check')}Assegna / aggiorna</button><div id="saMemMsg"></div></div>
     <div class="card"><div class="sa-head">${icon('link')}<h3>Collega cliente WealthView</h3></div><p class="sa-sub">Associa l’email di una persona a un conto cliente.</p><div class="ff"><label>Email persona</label><input id="saLinkEmail" type="email" placeholder="nome@dominio.it"></div><div class="ff"><label>Codice cliente</label><input id="saLinkCode" type="text" placeholder="es. CLI-123456"></div><button class="btn" onclick="saLinkClient()">${icon('link')}Collega account</button><div id="saLinkMsg"></div></div>
-  </div>`;
+  </div>
+  <div class="card" style="margin-top:16px"><div class="sa-head">${icon('modules')}<h3>Moduli per cliente</h3><button class="btn ghost sm" onclick="saLoadModules()">${icon('settings')}Aggiorna</button></div><p class="sa-sub">Attiva o disattiva i moduli per ciascun tenant. Le modifiche sono immediate.</p><div id="saModMsg"></div><div class="tablecard" id="saModWrap"><div class="callout">Caricamento…</div></div></div>`;
 }
-function wireSuperadmin(){ if(!isSuperadmin())return; saLoadOrgs(); }
+function wireSuperadmin(){ if(!isSuperadmin())return; saLoadOrgs(); saLoadModules(); }
 window.wireSuperadmin=wireSuperadmin;
+
+/* --- Catalogo moduli multi-tenant --- */
+const MODULES=[
+  {key:'crm',label:'CRM',ic:'grid'},
+  {key:'calendar',label:'Calendario',ic:'calendar'},
+  {key:'email',label:'Email',ic:'mail'},
+  {key:'signature',label:'Firma digitale',ic:'check'},
+  {key:'segretario',label:'Segretario',ic:'buoy'},
+  {key:'wealthview',label:'WealthView',ic:'chart'},
+];
+const MODULE_LABEL=Object.fromEntries(MODULES.map(m=>[m.key,m.label]));
+const MODULE_ORDER=MODULES.map(m=>m.key);
+
+/* --- Matrice moduli per tenant (superadmin) --- */
+async function saLoadModules(){
+  const wrap=document.getElementById('saModWrap');if(!wrap)return;
+  wrap.innerHTML='<div class="callout">Caricamento…</div>';
+  try{
+    const data=await rpc('crm_admin_list_modules',{});
+    const rows=Array.isArray(data)?data:(data?[data]:[]);
+    if(!rows.length){wrap.innerHTML='<div class="callout">Nessun dato sui moduli.</div>';return;}
+    // Raggruppa per org: { org_id, org_name, mods:{module:enabled} }
+    const orgs=new Map();
+    rows.forEach(r=>{
+      const id=String(r.org_id??'');
+      if(!orgs.has(id))orgs.set(id,{id,name:String(r.org_name??r.org_id??''),mods:{}});
+      orgs.get(id).mods[r.module]=!!r.enabled;
+    });
+    const list=[...orgs.values()].sort((a,b)=>a.name.localeCompare(b.name));
+    const head=`<tr><th>Organizzazione</th>${MODULES.map(m=>`<th style="text-align:center">${esc(m.label)}</th>`).join('')}</tr>`;
+    const body=list.map(o=>{
+      const cells=MODULE_ORDER.map(k=>{
+        const on=!!o.mods[k];
+        return `<td><div style="display:flex;justify-content:center"><div class="toggle ${on?'':'off'}" data-mod-org="${esc(o.id)}" data-mod-key="${esc(k)}" data-mod-on="${on?'1':'0'}" title="${on?'Disattiva':'Attiva'} ${esc(MODULE_LABEL[k]||k)}"></div></div></td>`;
+      }).join('');
+      return `<tr><td><b>${esc(o.name)}</b><div style="font-size:11px;color:var(--text-3);font-family:monospace">${esc(o.id)}</div></td>${cells}</tr>`;
+    }).join('');
+    wrap.innerHTML=`<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+    wrap.querySelectorAll('[data-mod-org]').forEach(el=>el.addEventListener('click',()=>saToggleModule(el)));
+  }catch(err){
+    wrap.innerHTML=`<div class="callout sa-err">${esc(err&&err.message?err.message:String(err))}</div>`;
+  }
+}
+async function saToggleModule(el){
+  const org=el.getAttribute('data-mod-org');
+  const key=el.getAttribute('data-mod-key');
+  const cur=el.getAttribute('data-mod-on')==='1';
+  const box=document.getElementById('saModMsg');if(box)box.innerHTML='';
+  // Feedback ottimistico
+  el.classList.toggle('off',cur);
+  try{
+    await rpc('crm_admin_set_module',{p_org:org,p_module:key,p_enabled:!cur});
+    toast((!cur?'Attivato':'Disattivato')+': '+(MODULE_LABEL[key]||key));
+    await saLoadModules();
+  }catch(err){
+    el.classList.toggle('off',!cur); // ripristina
+    if(box)box.innerHTML=`<div class="callout sa-err">${esc(err&&err.message?err.message:String(err))}</div>`;
+    toast('Errore: '+(err&&err.message?err.message:String(err)));
+  }
+}
 async function saLoadOrgs(){const wrap=document.getElementById('saOrgsWrap');if(!wrap)return;wrap.innerHTML='<div class="callout">Caricamento…</div>';try{const data=await rpc('crm_admin_list_orgs',{});const orgs=Array.isArray(data)?data:(data?[data]:[]);if(!orgs.length){wrap.innerHTML='<div class="callout">Nessuna organizzazione.</div>';return;}const rows=orgs.map(o=>`<tr><td><span class="pill">${esc(String(o.id??''))}</span></td><td>${esc(String(o.name??o.id??''))}</td><td>${o.members!==undefined?esc(String(o.members)):'—'}</td></tr>`).join('');wrap.innerHTML=`<table><thead><tr><th>ID</th><th>Nome</th><th>Membri</th></tr></thead><tbody>${rows}</tbody></table>`;}catch(err){wrap.innerHTML=`<div class="callout sa-err">${esc(err&&err.message?err.message:String(err))}</div>`;}}
 async function saSetMember(){const box=document.getElementById('saMemMsg');const email=(document.getElementById('saMemEmail').value||'').trim();const org=(document.getElementById('saMemOrg').value||'').trim();const role=(document.getElementById('saMemRole').value||'').trim();box.innerHTML='';if(!email||!org||!role){box.innerHTML='<div class="callout sa-err">Compila email, organizzazione e ruolo.</div>';return;}try{const res=await rpc('crm_admin_set_member',{p_email:email,p_org:org,p_role:role});box.innerHTML=`<div class="callout sa-ok">${esc(res==null?'Completato.':String(res))}</div>`;toast('Membro aggiornato');}catch(err){box.innerHTML=`<div class="callout sa-err">${esc(err&&err.message?err.message:String(err))}</div>`;}}
 async function saLinkClient(){const box=document.getElementById('saLinkMsg');const email=(document.getElementById('saLinkEmail').value||'').trim();const code=(document.getElementById('saLinkCode').value||'').trim();box.innerHTML='';if(!email||!code){box.innerHTML='<div class="callout sa-err">Compila email e codice cliente.</div>';return;}try{const res=await rpc('admin_link_client',{p_email:email,p_client_code:code});box.innerHTML=`<div class="callout sa-ok">${esc(res==null?'Completato.':String(res))}</div>`;toast('Cliente collegato');}catch(err){box.innerHTML=`<div class="callout sa-err">${esc(err&&err.message?err.message:String(err))}</div>`;}}
