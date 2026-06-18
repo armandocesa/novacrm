@@ -1839,19 +1839,41 @@ function segCreateCondo(){
 function segDelCondo(id){segFiscalDelete('seg_condo_delete',id,segLoadCondominio);}
 
 /* ===================== MODULI CRM — VISTE COLLEGATE AL BACKEND ===================== */
-/* Helper generico: vista a tabella per un modulo CRM. */
+/* Helper generico: vista a sola tabella per un modulo CRM. */
 function modShell(listId,noteHtml){
   return note(noteHtml)+`<div class="tablecard" id="${listId}"><div class="empty">Caricamento…</div></div>`;
 }
-/* Carica una RPC di lista e renderizza le colonne richieste. cols=[[key,label,fmt?]] */
-async function modList(listId,rpcName,args,cols){
+/* Helper: vista lista + form "nuovo" per un modulo CRM.
+   cfg = {note, listId, formTitle, onCreate, fields:[{id,label,type,opts,ph,val}]} */
+function modShellForm(cfg){
+  const form=cfg.fields.map(f=>{
+    if(f.type==='select'){
+      return `<div class="ff"><label>${esc(f.label)}</label><select id="${f.id}">${f.opts.map(o=>`<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select></div>`;
+    }
+    const t=f.type||'text';
+    return `<div class="ff"><label>${esc(f.label)}</label><input id="${f.id}" type="${t}" ${f.val!==undefined?`value="${esc(f.val)}"`:''} placeholder="${esc(f.ph||'')}"></div>`;
+  }).join('');
+  return note(cfg.note)+
+  `<div class="grid2" style="align-items:start">
+    <div><div class="tablecard" id="${cfg.listId}"><div class="empty">Caricamento…</div></div></div>
+    <div class="card">
+      <h3>${esc(cfg.formTitle)}</h3>
+      ${form}
+      <div id="${cfg.listId}_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="${cfg.onCreate}()">${icon('plus')}Crea</button>
+    </div>
+  </div>`;
+}
+/* Carica una RPC di lista e renderizza le colonne richieste. cols=[[key,label,fmt?]]
+   Se delFn è passato, aggiunge una colonna Azioni con il pulsante Elimina per riga. */
+async function modList(listId,rpcName,args,cols,delFn){
   const el=document.getElementById(listId);if(!el)return;
   el.innerHTML='<div class="empty">Caricamento…</div>';
   try{
     const data=await rpc(rpcName,args||{});
     const rows=Array.isArray(data)?data:(data?[data]:[]);
     if(!rows.length){el.innerHTML='<div class="empty">Nessun record.</div>';return;}
-    const head=cols.map(c=>`<th>${esc(c[1])}</th>`).join('');
+    const head=cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+(delFn?'<th style="text-align:right">Azioni</th>':'');
     const body=rows.map(r=>{
       const tds=cols.map(c=>{
         let v=r[c[0]];
@@ -1859,36 +1881,211 @@ async function modList(listId,rpcName,args,cols){
         else if(c[2]==='date'&&v){const dt=new Date(v);if(!isNaN(dt))v=dt.toLocaleDateString('it-IT');}
         return `<td>${(v===null||v===undefined||v==='')?'<span style="color:var(--text-3)">—</span>':esc(String(v))}</td>`;
       }).join('');
-      return `<tr>${tds}</tr>`;
+      let act='';
+      if(delFn){
+        const id=esc(String(r.id||''));
+        const del=id?`<button class="btn ghost sm" title="Elimina" onclick="${delFn}('${id}')" style="color:var(--red)">${icon('warn')}</button>`:'';
+        act=`<td style="text-align:right;white-space:nowrap">${del}</td>`;
+      }
+      return `<tr>${tds}${act}</tr>`;
     }).join('');
     el.innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   }catch(e){
     el.innerHTML=`<div class="empty">${esc(segPermErr(e))}</div>`+note('La lista non è al momento disponibile.');
   }
 }
+/* Create/Delete generici per i moduli CRM (riusano segPermErr per il messaggio). */
+async function modCreate(rpcName,args,listId,reloadFn){
+  const msg=document.getElementById(listId+'_msg');
+  try{
+    if(msg){msg.style.color='var(--text-3)';msg.textContent='Salvataggio…';}
+    await rpc(rpcName,args);
+    toast('Creato'); if(msg)msg.textContent=''; reloadFn();
+  }catch(e){
+    const m=segPermErr(e); if(msg){msg.style.color='var(--red)';msg.textContent=m;} toast(m);
+  }
+}
+async function modDelete(rpcName,id,reloadFn){
+  if(!id)return;
+  if(!confirm('Eliminare questo record? L\'operazione non è reversibile.'))return;
+  try{ await rpc(rpcName,{p_id:id}); toast('Eliminato'); reloadFn(); }
+  catch(e){ toast(segPermErr(e)); }
+}
+function modFormErr(listId,text){const m=document.getElementById(listId+'_msg');if(m){m.style.color='var(--red)';m.textContent=text;}}
+function modNum(v){const n=parseFloat(v);return Number.isFinite(n)?n:null;}
+function modInt(v){const n=parseInt(v,10);return Number.isFinite(n)?n:null;}
 function modAuthGuard(label){
   return note(`<b>${esc(label)} — disponibile dopo l’accesso.</b> Accedi al tuo workspace per usare questo modulo. In modalità demo non è attivo.`);
 }
-function vModSocial(){ if(mode!=='auth')return modAuthGuard('Social'); return modShell('mLSocial','<b>Social.</b> Post pianificati e pubblicati sui canali collegati.'); }
-function vModCampaigns(){ if(mode!=='auth')return modAuthGuard('Campagne'); return modShell('mLCamp','<b>Campagne.</b> Email marketing con pianificazione e statistiche.'); }
-function vModSequences(){ if(mode!=='auth')return modAuthGuard('Sequenze'); return modShell('mLSeq','<b>Sequenze.</b> Cadenze automatiche di email e attività.'); }
-function vModWorkflows(){ if(mode!=='auth')return modAuthGuard('Workflow'); return modShell('mLWf','<b>Workflow.</b> Automazioni attivate da eventi.'); }
-function vModDesk(){ if(mode!=='auth')return modAuthGuard('Assistenza'); return modShell('mLDesk','<b>Assistenza.</b> Ticket di supporto e richieste dei clienti.'); }
-function vModWebforms(){ if(mode!=='auth')return modAuthGuard('Web form'); return modShell('mLWf2','<b>Web form.</b> Moduli per acquisire lead dal sito.'); }
-function vModMessaging(){ if(mode!=='auth')return modAuthGuard('Messaggi'); return modShell('mLMsg','<b>Messaggi.</b> Conversazioni dirette con i contatti.'); }
-function vModCalls(){ if(mode!=='auth')return modAuthGuard('Chiamate'); return modShell('mLCalls','<b>Chiamate.</b> Registro delle chiamate e telefonia.'); }
-function vModAgent(){ if(mode!=='auth')return modAuthGuard('Agente AI'); return modShell('mLAgent','<b>Agente AI.</b> Agenti conversazionali configurati per il workspace.'); }
+/* ---- Social ---- */
+function vModSocial(){ if(mode!=='auth')return modAuthGuard('Social');
+  return modShellForm({note:'<b>Social.</b> Post pianificati e pubblicati sui canali collegati.',
+    listId:'mLSocial', formTitle:'Nuovo post', onCreate:'modCreateSocial',
+    fields:[
+      {id:'so_content',label:'Contenuto *',ph:'Testo del post'},
+      {id:'so_platforms',label:'Piattaforme',ph:'es. facebook, instagram',type:'text'},
+      {id:'so_sched',label:'Pianificazione',type:'datetime-local'}
+    ]}); }
+function modLoadSocial(){ modList('mLSocial','crm_social_posts_list',{},[['content','Contenuto'],['status','Stato'],['scheduled_at','Pianificato','date'],['created_at','Creato','date']],'modDelSocial'); }
+function modCreateSocial(){
+  const content=gv('so_content'); if(!content){modFormErr('mLSocial','Il contenuto è obbligatorio.');return;}
+  const plat=(gv('so_platforms')||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const sched=gv('so_sched');
+  modCreate('crm_social_post_create',{p_content:content,p_platforms:plat,p_scheduled_at:sched?new Date(sched).toISOString():null},'mLSocial',modLoadSocial);
+}
+function modDelSocial(id){ modDelete('crm_social_post_delete',id,modLoadSocial); }
+
+/* ---- Campagne ---- */
+function vModCampaigns(){ if(mode!=='auth')return modAuthGuard('Campagne');
+  return modShellForm({note:'<b>Campagne.</b> Email marketing con pianificazione e statistiche.',
+    listId:'mLCamp', formTitle:'Nuova campagna', onCreate:'modCreateCamp',
+    fields:[
+      {id:'cp_name',label:'Nome *',ph:'Newsletter di giugno'},
+      {id:'cp_subject',label:'Oggetto *',ph:'Le novità del mese'},
+      {id:'cp_from',label:'Nome mittente',ph:'Studio Rossi'}
+    ]}); }
+function modLoadCamp(){ modList('mLCamp','crm_campaigns_list',{},[['name','Nome'],['subject','Oggetto'],['status','Stato'],['scheduled_at','Pianificata','date'],['sent_at','Inviata','date']],'modDelCamp'); }
+function modCreateCamp(){
+  const name=gv('cp_name'),subject=gv('cp_subject');
+  if(!name||!subject){modFormErr('mLCamp','Nome e oggetto sono obbligatori.');return;}
+  modCreate('crm_campaign_create',{p_name:name,p_subject:subject,p_from_name:gv('cp_from')||null},'mLCamp',modLoadCamp);
+}
+function modDelCamp(id){ modDelete('crm_campaign_delete',id,modLoadCamp); }
+
+/* ---- Sequenze ---- */
+function vModSequences(){ if(mode!=='auth')return modAuthGuard('Sequenze');
+  return modShellForm({note:'<b>Sequenze.</b> Cadenze automatiche di email e attività.',
+    listId:'mLSeq', formTitle:'Nuova sequenza', onCreate:'modCreateSeq',
+    fields:[
+      {id:'sq_name',label:'Nome *',ph:'Onboarding nuovo cliente'},
+      {id:'sq_desc',label:'Descrizione',ph:'Breve descrizione'},
+      {id:'sq_active',label:'Stato',type:'select',opts:[['si','Attiva'],['no','Inattiva']]}
+    ]}); }
+function modLoadSeq(){ modList('mLSeq','crm_sequences_list',{},[['name','Nome'],['description','Descrizione'],['active','Stato','bool'],['steps_count','Step'],['created_at','Creata','date']],'modDelSeq'); }
+function modCreateSeq(){
+  const name=gv('sq_name'); if(!name){modFormErr('mLSeq','Il nome è obbligatorio.');return;}
+  modCreate('crm_sequence_create',{p_name:name,p_description:gv('sq_desc')||null,p_active:gv('sq_active')!=='no'},'mLSeq',modLoadSeq);
+}
+function modDelSeq(id){ modDelete('crm_sequence_delete',id,modLoadSeq); }
+
+/* ---- Workflow ---- */
+function vModWorkflows(){ if(mode!=='auth')return modAuthGuard('Workflow');
+  return modShellForm({note:'<b>Workflow.</b> Automazioni attivate da eventi.',
+    listId:'mLWf', formTitle:'Nuovo workflow', onCreate:'modCreateWf',
+    fields:[
+      {id:'wf_name',label:'Nome *',ph:'Notifica nuovo lead'},
+      {id:'wf_entity',label:'Entità',type:'select',opts:[['contact','Contatto'],['company','Azienda'],['deal','Trattativa'],['activity','Attività']]},
+      {id:'wf_trigger',label:'Evento trigger',type:'select',opts:[['created','Creazione'],['updated','Aggiornamento'],['stage_changed','Cambio fase'],['status_changed','Cambio stato']]},
+      {id:'wf_active',label:'Stato',type:'select',opts:[['si','Attivo'],['no','Inattivo']]}
+    ]}); }
+function modLoadWf(){ modList('mLWf','crm_workflows_list',{},[['name','Nome'],['entity','Entità'],['trigger_event','Evento'],['active','Stato','bool'],['last_run_at','Ultima esec.','date']],'modDelWf'); }
+function modCreateWf(){
+  const name=gv('wf_name'); if(!name){modFormErr('mLWf','Il nome è obbligatorio.');return;}
+  modCreate('crm_workflow_create',{p_name:name,p_entity:gv('wf_entity')||'contact',p_trigger_event:gv('wf_trigger')||'created',p_active:gv('wf_active')!=='no'},'mLWf',modLoadWf);
+}
+function modDelWf(id){ modDelete('crm_workflow_delete',id,modLoadWf); }
+
+/* ---- Assistenza (ticket) ---- */
+function vModDesk(){ if(mode!=='auth')return modAuthGuard('Assistenza');
+  return modShellForm({note:'<b>Assistenza.</b> Ticket di supporto e richieste dei clienti.',
+    listId:'mLDesk', formTitle:'Nuovo ticket', onCreate:'modCreateDesk',
+    fields:[
+      {id:'tk_subject',label:'Oggetto *',ph:'Problema accesso area riservata'},
+      {id:'tk_desc',label:'Descrizione',ph:'Dettagli della richiesta'},
+      {id:'tk_priority',label:'Priorità',type:'select',opts:[['low','Bassa'],['medium','Media'],['high','Alta'],['urgent','Urgente']]},
+      {id:'tk_channel',label:'Canale',type:'select',opts:[['web','Web'],['email','Email'],['phone','Telefono'],['chat','Chat']]}
+    ]}); }
+function modLoadDesk(){ modList('mLDesk','crm_tickets_list',{},[['number','#'],['subject','Oggetto'],['status','Stato'],['priority','Priorità'],['contact_name','Contatto'],['created_at','Creato','date']],'modDelDesk'); }
+function modCreateDesk(){
+  const subj=gv('tk_subject'); if(!subj){modFormErr('mLDesk','L\'oggetto è obbligatorio.');return;}
+  modCreate('crm_ticket_create',{p_subject:subj,p_description:gv('tk_desc')||null,p_priority:gv('tk_priority')||'medium',p_channel:gv('tk_channel')||'web'},'mLDesk',modLoadDesk);
+}
+function modDelDesk(id){ modDelete('crm_ticket_delete',id,modLoadDesk); }
+
+/* ---- Web form ---- */
+function vModWebforms(){ if(mode!=='auth')return modAuthGuard('Web form');
+  return modShellForm({note:'<b>Web form.</b> Moduli per acquisire lead dal sito.',
+    listId:'mLWf2', formTitle:'Nuovo web form', onCreate:'modCreateWeb',
+    fields:[
+      {id:'wb_name',label:'Nome *',ph:'Contattaci'},
+      {id:'wb_slug',label:'Slug *',ph:'contattaci'},
+      {id:'wb_title',label:'Titolo',ph:'Richiedi informazioni'},
+      {id:'wb_active',label:'Stato',type:'select',opts:[['si','Attivo'],['no','Inattivo']]}
+    ]}); }
+function modLoadWeb(){ modList('mLWf2','crm_webforms_list',{},[['name','Nome'],['slug','Slug'],['title','Titolo'],['active','Stato','bool'],['created_at','Creato','date']],'modDelWeb'); }
+function modCreateWeb(){
+  const name=gv('wb_name'),slug=gv('wb_slug');
+  if(!name||!slug){modFormErr('mLWf2','Nome e slug sono obbligatori.');return;}
+  modCreate('crm_webform_create',{p_name:name,p_slug:slug,p_title:gv('wb_title')||null,p_active:gv('wb_active')!=='no'},'mLWf2',modLoadWeb);
+}
+function modDelWeb(id){ modDelete('crm_webform_delete',id,modLoadWeb); }
+
+/* ---- Messaggi (conversazioni create inviando un messaggio) ---- */
+function vModMessaging(){ if(mode!=='auth')return modAuthGuard('Messaggi');
+  return modShellForm({note:'<b>Messaggi.</b> Conversazioni dirette con i contatti. Invia un messaggio per aprire una conversazione.',
+    listId:'mLMsg', formTitle:'Nuovo messaggio', onCreate:'modCreateMsg',
+    fields:[
+      {id:'mg_contact',label:'ID contatto',ph:'UUID del contatto (opzionale)'},
+      {id:'mg_channel',label:'Canale',type:'select',opts:[['sms','SMS'],['whatsapp','WhatsApp']]},
+      {id:'mg_body',label:'Testo *',ph:'Messaggio da inviare'},
+      {id:'mg_phone',label:'Numero destinatario',ph:'+39… (se senza contatto)'}
+    ]}); }
+function modLoadMsg(){ modList('mLMsg','crm_conversations_list',{},[['channel','Canale'],['contact_name','Contatto'],['phone','Telefono'],['last_message','Ultimo messaggio'],['last_at','Quando','date']]); }
+function modCreateMsg(){
+  const body=gv('mg_body'); if(!body){modFormErr('mLMsg','Il testo è obbligatorio.');return;}
+  const contact=gv('mg_contact')||null, phone=gv('mg_phone')||null;
+  if(!contact&&!phone){modFormErr('mLMsg','Indica un ID contatto o un numero destinatario.');return;}
+  modCreate('crm_message_send',{p_contact:contact,p_channel:gv('mg_channel')||'sms',p_body:body,p_phone:phone},'mLMsg',modLoadMsg);
+}
+
+/* ---- Chiamate ---- */
+function vModCalls(){ if(mode!=='auth')return modAuthGuard('Chiamate');
+  return modShellForm({note:'<b>Chiamate.</b> Registro delle chiamate e telefonia.',
+    listId:'mLCalls', formTitle:'Nuova chiamata', onCreate:'modCreateCall',
+    fields:[
+      {id:'cl_dir',label:'Direzione',type:'select',opts:[['outbound','In uscita'],['inbound','In entrata']]},
+      {id:'cl_to',label:'Numero',ph:'+39…'},
+      {id:'cl_status',label:'Stato',type:'select',opts:[['completed','Completata'],['missed','Persa'],['busy','Occupato'],['failed','Fallita'],['voicemail','Segreteria']]},
+      {id:'cl_dur',label:'Durata (sec)',type:'number',val:'0'},
+      {id:'cl_notes',label:'Note',ph:'Annotazioni'}
+    ]}); }
+function modLoadCalls(){ modList('mLCalls','crm_calls_list',{},[['direction','Direzione'],['contact_name','Contatto'],['from_number','Da'],['to_number','A'],['status','Stato'],['started_at','Inizio','date']],'modDelCall'); }
+function modCreateCall(){
+  modCreate('crm_call_log',{p_direction:gv('cl_dir')||'outbound',p_to_number:gv('cl_to')||null,p_status:gv('cl_status')||'completed',p_duration_sec:modInt(gv('cl_dur'))||0,p_notes:gv('cl_notes')||null},'mLCalls',modLoadCalls);
+}
+function modDelCall(id){ modDelete('crm_call_delete',id,modLoadCalls); }
+
+/* ---- Agente AI ---- */
+function vModAgent(){ if(mode!=='auth')return modAuthGuard('Agente AI');
+  return modShellForm({note:'<b>Agente AI.</b> Agenti conversazionali configurati per il workspace.',
+    listId:'mLAgent', formTitle:'Nuovo agente', onCreate:'modCreateAgent',
+    fields:[
+      {id:'ag_name',label:'Nome *',ph:'Assistente vendite'},
+      {id:'ag_prompt',label:'System prompt',ph:'Sei un assistente…'},
+      {id:'ag_model',label:'Modello',ph:'es. gpt-4o-mini',val:'gpt-4o-mini'}
+    ]}); }
+function modLoadAgent(){ modList('mLAgent','crm_agents_list',{},[['name','Nome'],['model','Modello'],['created_at','Creato','date']],'modDelAgent'); }
+function modCreateAgent(){
+  const name=gv('ag_name'); if(!name){modFormErr('mLAgent','Il nome è obbligatorio.');return;}
+  modCreate('crm_agent_upsert',{
+    p_id:null,p_name:name,p_system_prompt:gv('ag_prompt')||'',p_model:gv('ag_model')||'gpt-4o-mini',
+    p_temperature:0.7,p_voice_id:null,p_voice_settings:null,p_enabled_tools:[],
+    p_knowledge:null,p_channels:[],p_active:true
+  },'mLAgent',modLoadAgent);
+}
+function modDelAgent(id){ modDelete('crm_agent_delete',id,modLoadAgent); }
+
 /* Mappa loader post-render dei moduli CRM. */
 const MODLOADERS={
-  mod_social:()=>modList('mLSocial','crm_social_posts_list',{},[['content','Contenuto'],['status','Stato'],['scheduled_at','Pianificato','date'],['created_at','Creato','date']]),
-  mod_campaigns:()=>modList('mLCamp','crm_campaigns_list',{},[['name','Nome'],['subject','Oggetto'],['status','Stato'],['scheduled_at','Pianificata','date'],['sent_at','Inviata','date']]),
-  mod_sequences:()=>modList('mLSeq','crm_sequences_list',{},[['name','Nome'],['description','Descrizione'],['active','Stato','bool'],['steps_count','Step'],['created_at','Creata','date']]),
-  mod_workflows:()=>modList('mLWf','crm_workflows_list',{},[['name','Nome'],['entity','Entità'],['trigger_event','Evento'],['active','Stato','bool'],['last_run_at','Ultima esec.','date']]),
-  mod_desk:()=>modList('mLDesk','crm_tickets_list',{},[['number','#'],['subject','Oggetto'],['status','Stato'],['priority','Priorità'],['contact_name','Contatto'],['created_at','Creato','date']]),
-  mod_webforms:()=>modList('mLWf2','crm_webforms_list',{},[['name','Nome'],['slug','Slug'],['title','Titolo'],['active','Stato','bool'],['created_at','Creato','date']]),
-  mod_messaging:()=>modList('mLMsg','crm_conversations_list',{},[['channel','Canale'],['contact_name','Contatto'],['phone','Telefono'],['last_message','Ultimo messaggio'],['last_at','Quando','date']]),
-  mod_calls:()=>modList('mLCalls','crm_calls_list',{},[['direction','Direzione'],['contact_name','Contatto'],['from_number','Da'],['to_number','A'],['status','Stato'],['started_at','Inizio','date']]),
-  mod_agent:()=>modList('mLAgent','crm_agents_list',{},[['name','Nome'],['model','Modello'],['created_at','Creato','date']])
+  mod_social:modLoadSocial,
+  mod_campaigns:modLoadCamp,
+  mod_sequences:modLoadSeq,
+  mod_workflows:modLoadWf,
+  mod_desk:modLoadDesk,
+  mod_webforms:modLoadWeb,
+  mod_messaging:modLoadMsg,
+  mod_calls:modLoadCalls,
+  mod_agent:modLoadAgent
 };
 
 /* --- Catalogo moduli multi-tenant --- */
