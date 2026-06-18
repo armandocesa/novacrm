@@ -715,7 +715,8 @@ function render(view){
   c.classList.remove('view');void c.offsetWidth;c.classList.add('view');
   if(orgIdx!==0){c.innerHTML=tenantEmpty();return;}
   const VIEWS={dashboard:vDashboard,contatti:vContatti,aziende:vAziende,trattative:vTrattative,attivita:vAttivita,calendario:vCalendario,email:vEmail,messaggi:vMessaggi,chiamate:vChiamate,social:vSocial,webform:vWebform,campagne:vCampagne,sequenze:vSequenze,workflow:vWorkflow,blueprint:vBlueprint,ticket:vTicket,knowledge:vKnowledge,centro:vCentro,report:vReport,moduli:vModuli,ruoli:vRuoli,audit:vAudit,marketplace:vMarketplace,mobile:vMobile,organizzazione:vOrg,pagine:vPagine,superadmin:vSuperadmin,
-    mod_calendar:vModPlaceholder,mod_email:vModPlaceholder,mod_signature:vSignature,mod_segretario:vSegretario,mod_wealthview:vModPlaceholder,mod_none:vNoModule};
+    mod_calendar:vModPlaceholder,mod_email:vModPlaceholder,mod_signature:vSignature,mod_segretario:vSegretario,mod_wealthview:vModPlaceholder,mod_none:vNoModule,
+    mod_social:vModSocial,mod_campaigns:vModCampaigns,mod_sequences:vModSequences,mod_workflows:vModWorkflows,mod_desk:vModDesk,mod_webforms:vModWebforms,mod_messaging:vModMessaging,mod_calls:vModCalls,mod_agent:vModAgent};
   const fn=VIEWS[view]||vDashboard;
   c.innerHTML=fn(view);
   if(view==='trattative')wireDnd();
@@ -727,6 +728,7 @@ function render(view){
   if(view==='attivita')wireAtt();
   if(view==='mod_segretario'&&window.segLoad)window.segLoad();
   if(view==='mod_signature'&&window.signLoad)window.signLoad();
+  if(MODLOADERS[view])MODLOADERS[view]();
 }
 function tenantEmpty(){return note(`<b>Isolamento multi-tenant.</b> Stai vedendo il workspace di <b>${ORGS[orgIdx]}</b>, un altro cliente. Dati separati tramite Row Level Security. Torna a "Rossi Costruzioni" per la demo.`)+`<div class="empty">Nessun dato demo per questo workspace.</div>`;}
 function sp(s){const m={lead:['lead','Lead'],qual:['qual','Qualificato'],cli:['cli','Cliente'],cold:['cold','Freddo']};const[c,l]=m[s];return `<span class="pill ${c}">${l}</span>`;}
@@ -1344,7 +1346,10 @@ window.wireSuperadmin=wireSuperadmin;
 
 /* ===================== MODULO SEGRETARIO: SCADENZARIO ===================== */
 /* Stato locale della vista Scadenzario */
-const SEG={ filter:'all', items:[] };
+const SEG={ filter:'all', items:[], tab:'scadenzario' };
+const SEG_TABS=[['scadenzario','Scadenzario'],['anagrafica','Anagrafica'],['imu','IMU'],['locazioni','Locazioni'],['f24','F24'],['dichiarazioni','Dichiarazioni'],['condominio','Condominio']];
+function segSetTab(t){SEG.tab=t;render('mod_segretario');}
+function segPermErr(e){const m=segErr(e);return /admin|permess|denied|negato|insufficient/i.test(m)?'Permesso negato':m;}
 const SEG_REC={none:'Nessuna',monthly:'Mensile',quarterly:'Trimestrale',semiannual:'Semestrale',yearly:'Annuale',custom:'Personalizzata'};
 function segRecLbl(r){return SEG_REC[r]||esc(r||'Nessuna');}
 function segErr(e){return e&&e.message?e.message:String(e);}
@@ -1366,8 +1371,22 @@ function segDueBadge(due,status){
 }
 function vSegretario(){
   if(mode!=='auth'){
-    return note('<b>Scadenzario — disponibile dopo l’accesso.</b> Accedi al tuo workspace per gestire le scadenze. In modalità demo questa funzione non è attiva.');
+    return note('<b>Segretario fiscale — disponibile dopo l’accesso.</b> Accedi al tuo workspace per gestire scadenze, anagrafiche e adempimenti. In modalità demo questa funzione non è attiva.');
   }
+  const subtabs=SEG_TABS.map(([k,l])=>`<div class="tab ${SEG.tab===k?'active':''}" onclick="segSetTab('${k}')">${esc(l)}</div>`).join('');
+  let body='';
+  switch(SEG.tab){
+    case 'anagrafica': body=segViewAnagrafica(); break;
+    case 'imu': body=segViewImu(); break;
+    case 'locazioni': body=segViewLocazioni(); break;
+    case 'f24': body=segViewF24(); break;
+    case 'dichiarazioni': body=segViewDichiarazioni(); break;
+    case 'condominio': body=segViewCondominio(); break;
+    default: body=segViewScadenzario();
+  }
+  return `<div class="tabs">${subtabs}</div>${body}`;
+}
+function segViewScadenzario(){
   const f=SEG.filter;
   const tabs=[['all','Tutte'],['open','Aperte'],['done','Fatte']].map(([k,l])=>
     `<div class="tab ${f===k?'active':''}" onclick="segSetFilter('${k}')">${l}</div>`).join('');
@@ -1400,6 +1419,7 @@ function vSegretario(){
 function segSetFilter(f){SEG.filter=f;render('mod_segretario');}
 window.segLoad=async function(){
   if(mode!=='auth')return;
+  if(SEG.tab!=='scadenzario'){ if(window.segTabLoad)window.segTabLoad(); return; }
   const el=document.getElementById('segList');if(!el)return;
   el.innerHTML='<div class="empty">Caricamento…</div>';
   const pStatus = SEG.filter==='open' ? 'open' : null; // 'fatte' e 'tutte' filtrate lato client
@@ -1596,6 +1616,281 @@ async function signCancel(id,label){
   }
 }
 
+/* ===================== SEGRETARIO — SCHEDE FISCALI ===================== */
+/* Helper riusabile: shell lista + form per una scheda fiscale.
+   cfg = {note, listId, head:[...], formTitle, fields:[{id,label,type,opts,ph,val}], onCreate} */
+function segFiscalShell(cfg){
+  const form=cfg.fields.map(f=>{
+    if(f.type==='select'){
+      return `<div class="ff"><label>${esc(f.label)}</label><select id="${f.id}">${f.opts.map(o=>`<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select></div>`;
+    }
+    const t=f.type||'text';
+    return `<div class="ff"><label>${esc(f.label)}</label><input id="${f.id}" type="${t}" ${f.val!==undefined?`value="${esc(f.val)}"`:''} placeholder="${esc(f.ph||'')}"></div>`;
+  }).join('');
+  return note(cfg.note)+
+  `<div class="grid2" style="align-items:start">
+    <div><div class="tablecard" id="${cfg.listId}"><div class="empty">Caricamento…</div></div></div>
+    <div class="card">
+      <h3>${esc(cfg.formTitle)}</h3>
+      ${form}
+      <div id="${cfg.listId}_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="${cfg.onCreate}()">${icon('plus')}Crea</button>
+    </div>
+  </div>`;
+}
+/* Render generico di una tabella per le schede fiscali. */
+function segTable(rows,cols,delFn){
+  if(!rows.length)return '<div class="empty">Nessun record.</div>';
+  const head=cols.map(c=>`<th>${esc(c[1])}</th>`).join('')+'<th style="text-align:right">Azioni</th>';
+  const body=rows.map(r=>{
+    const id=esc(String(r.id||''));
+    const tds=cols.map(c=>{
+      let v=r[c[0]];
+      if(c[2]==='bool')v=v?'Sì':'No';
+      return `<td>${(v===null||v===undefined||v==='')?'<span style="color:var(--text-3)">—</span>':esc(String(v))}</td>`;
+    }).join('');
+    const del=id?`<button class="btn ghost sm" title="Elimina" onclick="${delFn}('${id}')" style="color:var(--red)">${icon('warn')}</button>`:'';
+    return `<tr>${tds}<td style="text-align:right;white-space:nowrap">${del}</td></tr>`;
+  }).join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+async function segFiscalLoad(listId,rpcName,args,cols,delFn){
+  const el=document.getElementById(listId);if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  try{
+    const data=await rpc(rpcName,args||{});
+    const rows=Array.isArray(data)?data:(data?[data]:[]);
+    el.innerHTML=segTable(rows,cols,delFn);
+  }catch(e){
+    el.innerHTML=`<div class="empty">${esc(segPermErr(e))}</div>`;
+  }
+}
+async function segFiscalDelete(rpcName,id,reloadFn){
+  if(!id)return;
+  if(!confirm('Eliminare questo record? L\'operazione non è reversibile.'))return;
+  try{ await rpc(rpcName,{p_id:id}); toast('Eliminato'); reloadFn(); }
+  catch(e){ toast(segPermErr(e)); }
+}
+async function segFiscalCreate(rpcName,args,listId,reloadFn){
+  const msg=document.getElementById(listId+'_msg');
+  try{
+    if(msg){msg.style.color='var(--text-3)';msg.textContent='Salvataggio…';}
+    await rpc(rpcName,args);
+    toast('Creato'); if(msg)msg.textContent=''; reloadFn();
+  }catch(e){
+    const m=segPermErr(e); if(msg){msg.style.color='var(--red)';msg.textContent=m;} toast(m);
+  }
+}
+/* Dispatcher di caricamento per la scheda fiscale attiva. */
+window.segTabLoad=function(){
+  switch(SEG.tab){
+    case 'anagrafica': return segLoadAnagrafica();
+    case 'imu': return segLoadImu();
+    case 'locazioni': return segLoadLocazioni();
+    case 'f24': return segLoadF24();
+    case 'dichiarazioni': return segLoadDichiarazioni();
+    case 'condominio': return segLoadCondominio();
+  }
+};
+
+/* ---- Anagrafica (profili fiscali) ---- */
+function segViewAnagrafica(){
+  return segFiscalShell({
+    note:'<b>Anagrafica fiscale.</b> Persone e aziende seguite dallo studio, con dati identificativi e regime.',
+    listId:'segAnag', formTitle:'Nuovo soggetto', onCreate:'segCreateAnagrafica',
+    fields:[
+      {id:'an_name',label:'Denominazione *',ph:'Mario Rossi / Rossi SRL'},
+      {id:'an_kind',label:'Tipo',type:'select',opts:[['persona','Persona'],['azienda','Azienda']]},
+      {id:'an_cf',label:'Codice fiscale',ph:'RSSMRA…'},
+      {id:'an_piva',label:'Partita IVA',ph:'01234567890'},
+      {id:'an_regime',label:'Regime',ph:'es. Forfettario, Ordinario'},
+      {id:'an_email',label:'Email',type:'email',ph:'mario@esempio.it'}
+    ]
+  });
+}
+function segLoadAnagrafica(){segFiscalLoad('segAnag','seg_profile_list',{},[['display_name','Denominazione'],['kind','Tipo'],['codice_fiscale','Cod. fiscale'],['partita_iva','P.IVA'],['regime','Regime'],['email','Email']],'segDelAnagrafica');}
+function segCreateAnagrafica(){
+  const name=gv('an_name');
+  if(!name){const m=document.getElementById('segAnag_msg');m.style.color='var(--red)';m.textContent='La denominazione è obbligatoria.';return;}
+  segFiscalCreate('seg_profile_create',{p_display_name:name,p_kind:gv('an_kind')||'persona',p_codice_fiscale:gv('an_cf')||null,p_partita_iva:gv('an_piva')||null,p_regime:gv('an_regime')||null,p_email:gv('an_email')||null},'segAnag',segLoadAnagrafica);
+}
+function segDelAnagrafica(id){segFiscalDelete('seg_profile_delete',id,segLoadAnagrafica);}
+
+/* ---- IMU (immobili) ---- */
+function segViewImu(){
+  return segFiscalShell({
+    note:'<b>IMU.</b> Immobili soggetti a IMU, con dati catastali e quota di possesso.',
+    listId:'segImu', formTitle:'Nuovo immobile', onCreate:'segCreateImu',
+    fields:[
+      {id:'im_label',label:'Etichetta *',ph:'Abitazione Via Roma'},
+      {id:'im_comune',label:'Comune',ph:'Milano'},
+      {id:'im_cat',label:'Categoria catastale',ph:'A/2'},
+      {id:'im_rendita',label:'Rendita catastale',type:'number',ph:'0'},
+      {id:'im_quota',label:'Quota possesso (%)',type:'number',val:'100'},
+      {id:'im_mesi',label:'Mesi possesso',type:'number',val:'12'},
+      {id:'im_abit',label:'Abitazione principale',type:'select',opts:[['no','No'],['si','Sì']]}
+    ]
+  });
+}
+function segLoadImu(){segFiscalLoad('segImu','seg_imu_properties_list',{},[['label','Etichetta'],['comune','Comune'],['categoria_catastale','Categoria'],['rendita_catastale','Rendita'],['quota_possesso','Quota %'],['mesi_possesso','Mesi'],['abitazione_principale','Ab. princ.','bool']],'segDelImu');}
+function segCreateImu(){
+  const label=gv('im_label');
+  if(!label){const m=document.getElementById('segImu_msg');m.style.color='var(--red)';m.textContent='L\'etichetta è obbligatoria.';return;}
+  const num=v=>{const n=parseFloat(v);return Number.isFinite(n)?n:null;};
+  segFiscalCreate('seg_imu_property_create',{
+    p_label:label,p_comune:gv('im_comune')||null,p_categoria_catastale:gv('im_cat')||null,
+    p_rendita_catastale:num(gv('im_rendita')),p_quota_possesso:num(gv('im_quota')),
+    p_mesi_possesso:(()=>{const n=parseInt(gv('im_mesi'),10);return Number.isFinite(n)?n:12;})(),
+    p_abitazione_principale:gv('im_abit')==='si'
+  },'segImu',segLoadImu);
+}
+function segDelImu(id){segFiscalDelete('seg_imu_property_delete',id,segLoadImu);}
+
+/* ---- Locazioni ---- */
+function segViewLocazioni(){
+  return segFiscalShell({
+    note:'<b>Locazioni.</b> Contratti di affitto con canone, regime e cedolare secca.',
+    listId:'segLoc', formTitle:'Nuovo contratto', onCreate:'segCreateLoc',
+    fields:[
+      {id:'lc_tenant',label:'Inquilino *',ph:'Mario Rossi'},
+      {id:'lc_immobile',label:'Immobile',ph:'Via Roma 1, Milano'},
+      {id:'lc_canone',label:'Canone mensile',type:'number',ph:'800'},
+      {id:'lc_tipo',label:'Tipo contratto',ph:'es. 4+4, transitorio'},
+      {id:'lc_regime',label:'Regime',type:'select',opts:[['cedolare','Cedolare secca'],['ordinario','Ordinario']]},
+      {id:'lc_aliquota',label:'Aliquota cedolare (%)',type:'number',val:'21'},
+      {id:'lc_inizio',label:'Data inizio',type:'date'}
+    ]
+  });
+}
+function segLoadLocazioni(){segFiscalLoad('segLoc','seg_rent_contracts_list',{},[['tenant_name','Inquilino'],['immobile_descr','Immobile'],['canone_mensile','Canone'],['tipo_contratto','Tipo'],['regime','Regime'],['aliquota_cedolare','Aliq. %'],['data_inizio','Inizio'],['stato','Stato']],'segDelLoc');}
+function segCreateLoc(){
+  const t=gv('lc_tenant');
+  if(!t){const m=document.getElementById('segLoc_msg');m.style.color='var(--red)';m.textContent='L\'inquilino è obbligatorio.';return;}
+  const num=v=>{const n=parseFloat(v);return Number.isFinite(n)?n:null;};
+  segFiscalCreate('seg_rent_contract_create',{
+    p_tenant_name:t,p_immobile_descr:gv('lc_immobile')||null,p_canone_mensile:num(gv('lc_canone')),
+    p_tipo_contratto:gv('lc_tipo')||null,p_regime:gv('lc_regime')||'cedolare',
+    p_aliquota_cedolare:num(gv('lc_aliquota')),p_data_inizio:gv('lc_inizio')||null
+  },'segLoc',segLoadLocazioni);
+}
+function segDelLoc(id){segFiscalDelete('seg_rent_contract_delete',id,segLoadLocazioni);}
+
+/* ---- F24 ---- */
+function segViewF24(){
+  return segFiscalShell({
+    note:'<b>F24.</b> Deleghe di versamento dei tributi.',
+    listId:'segF24', formTitle:'Nuovo F24', onCreate:'segCreateF24',
+    fields:[
+      {id:'f4_tipo',label:'Tipo',type:'select',opts:[['ordinario','Ordinario'],['semplificato','Semplificato'],['accise','Accise'],['elide','Elide']]},
+      {id:'f4_anno',label:'Anno di riferimento',type:'number',ph:'2026'},
+      {id:'f4_data',label:'Data versamento',type:'date'},
+      {id:'f4_stato',label:'Stato',type:'select',opts:[['bozza','Bozza'],['pronto','Pronto'],['versato','Versato']]}
+    ]
+  });
+}
+function segLoadF24(){segFiscalLoad('segF24','seg_f24_list',{},[['tipo','Tipo'],['anno_riferimento','Anno'],['data_versamento','Versamento'],['totale','Totale'],['stato','Stato']],'segDelF24');}
+function segCreateF24(){
+  const anno=parseInt(gv('f4_anno'),10);
+  segFiscalCreate('seg_f24_create',{
+    p_tipo:gv('f4_tipo')||'ordinario',p_anno_riferimento:Number.isFinite(anno)?anno:null,
+    p_data_versamento:gv('f4_data')||null,p_stato:gv('f4_stato')||'bozza'
+  },'segF24',segLoadF24);
+}
+function segDelF24(id){segFiscalDelete('seg_f24_delete',id,segLoadF24);}
+
+/* ---- Dichiarazioni ---- */
+function segViewDichiarazioni(){
+  return segFiscalShell({
+    note:'<b>Dichiarazioni.</b> Dichiarazioni dei redditi e adempimenti annuali.',
+    listId:'segDic', formTitle:'Nuova dichiarazione', onCreate:'segCreateDic',
+    fields:[
+      {id:'dc_tipo',label:'Tipo *',ph:'es. 730, Redditi PF, IVA'},
+      {id:'dc_anno',label:'Anno d\'imposta *',type:'number',ph:'2025'},
+      {id:'dc_stato',label:'Stato',type:'select',opts:[['bozza','Bozza'],['inviata','Inviata'],['accettata','Accettata']]}
+    ]
+  });
+}
+function segLoadDichiarazioni(){segFiscalLoad('segDic','seg_declarations_list',{},[['tipo','Tipo'],['anno_imposta','Anno'],['stato','Stato'],['imposta_netta','Imp. netta'],['saldo','Saldo']],'segDelDic');}
+function segCreateDic(){
+  const tipo=gv('dc_tipo'); const anno=parseInt(gv('dc_anno'),10);
+  if(!tipo||!Number.isFinite(anno)){const m=document.getElementById('segDic_msg');m.style.color='var(--red)';m.textContent='Tipo e anno d\'imposta sono obbligatori.';return;}
+  segFiscalCreate('seg_declaration_create',{p_tipo:tipo,p_anno_imposta:anno,p_stato:gv('dc_stato')||'bozza'},'segDic',segLoadDichiarazioni);
+}
+function segDelDic(id){segFiscalDelete('seg_declaration_delete',id,segLoadDichiarazioni);}
+
+/* ---- Condominio ---- */
+function segViewCondominio(){
+  return segFiscalShell({
+    note:'<b>Condominio.</b> Condomìni amministrati dallo studio.',
+    listId:'segCondo', formTitle:'Nuovo condominio', onCreate:'segCreateCondo',
+    fields:[
+      {id:'co_nome',label:'Nome *',ph:'Condominio Via Roma'},
+      {id:'co_indirizzo',label:'Indirizzo',ph:'Via Roma 1'},
+      {id:'co_comune',label:'Comune',ph:'Milano'}
+    ]
+  });
+}
+function segLoadCondominio(){segFiscalLoad('segCondo','seg_condo_list',{},[['nome','Nome'],['indirizzo','Indirizzo'],['comune','Comune'],['codice_fiscale','Cod. fiscale']],'segDelCondo');}
+function segCreateCondo(){
+  const nome=gv('co_nome');
+  if(!nome){const m=document.getElementById('segCondo_msg');m.style.color='var(--red)';m.textContent='Il nome è obbligatorio.';return;}
+  segFiscalCreate('seg_condo_create',{p_nome:nome,p_indirizzo:gv('co_indirizzo')||null,p_comune:gv('co_comune')||null},'segCondo',segLoadCondominio);
+}
+function segDelCondo(id){segFiscalDelete('seg_condo_delete',id,segLoadCondominio);}
+
+/* ===================== MODULI CRM — VISTE COLLEGATE AL BACKEND ===================== */
+/* Helper generico: vista a tabella per un modulo CRM. */
+function modShell(listId,noteHtml){
+  return note(noteHtml)+`<div class="tablecard" id="${listId}"><div class="empty">Caricamento…</div></div>`;
+}
+/* Carica una RPC di lista e renderizza le colonne richieste. cols=[[key,label,fmt?]] */
+async function modList(listId,rpcName,args,cols){
+  const el=document.getElementById(listId);if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  try{
+    const data=await rpc(rpcName,args||{});
+    const rows=Array.isArray(data)?data:(data?[data]:[]);
+    if(!rows.length){el.innerHTML='<div class="empty">Nessun record.</div>';return;}
+    const head=cols.map(c=>`<th>${esc(c[1])}</th>`).join('');
+    const body=rows.map(r=>{
+      const tds=cols.map(c=>{
+        let v=r[c[0]];
+        if(c[2]==='bool')v=v?'Attivo':'Inattivo';
+        else if(c[2]==='date'&&v){const dt=new Date(v);if(!isNaN(dt))v=dt.toLocaleDateString('it-IT');}
+        return `<td>${(v===null||v===undefined||v==='')?'<span style="color:var(--text-3)">—</span>':esc(String(v))}</td>`;
+      }).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    el.innerHTML=`<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  }catch(e){
+    el.innerHTML=`<div class="empty">${esc(segPermErr(e))}</div>`+note('La lista non è al momento disponibile.');
+  }
+}
+function modAuthGuard(label){
+  return note(`<b>${esc(label)} — disponibile dopo l’accesso.</b> Accedi al tuo workspace per usare questo modulo. In modalità demo non è attivo.`);
+}
+function vModSocial(){ if(mode!=='auth')return modAuthGuard('Social'); return modShell('mLSocial','<b>Social.</b> Post pianificati e pubblicati sui canali collegati.'); }
+function vModCampaigns(){ if(mode!=='auth')return modAuthGuard('Campagne'); return modShell('mLCamp','<b>Campagne.</b> Email marketing con pianificazione e statistiche.'); }
+function vModSequences(){ if(mode!=='auth')return modAuthGuard('Sequenze'); return modShell('mLSeq','<b>Sequenze.</b> Cadenze automatiche di email e attività.'); }
+function vModWorkflows(){ if(mode!=='auth')return modAuthGuard('Workflow'); return modShell('mLWf','<b>Workflow.</b> Automazioni attivate da eventi.'); }
+function vModDesk(){ if(mode!=='auth')return modAuthGuard('Assistenza'); return modShell('mLDesk','<b>Assistenza.</b> Ticket di supporto e richieste dei clienti.'); }
+function vModWebforms(){ if(mode!=='auth')return modAuthGuard('Web form'); return modShell('mLWf2','<b>Web form.</b> Moduli per acquisire lead dal sito.'); }
+function vModMessaging(){ if(mode!=='auth')return modAuthGuard('Messaggi'); return modShell('mLMsg','<b>Messaggi.</b> Conversazioni dirette con i contatti.'); }
+function vModCalls(){ if(mode!=='auth')return modAuthGuard('Chiamate'); return modShell('mLCalls','<b>Chiamate.</b> Registro delle chiamate e telefonia.'); }
+function vModAgent(){ if(mode!=='auth')return modAuthGuard('Agente AI'); return modShell('mLAgent','<b>Agente AI.</b> Agenti conversazionali configurati per il workspace.'); }
+/* Mappa loader post-render dei moduli CRM. */
+const MODLOADERS={
+  mod_social:()=>modList('mLSocial','crm_social_posts_list',{},[['content','Contenuto'],['status','Stato'],['scheduled_at','Pianificato','date'],['created_at','Creato','date']]),
+  mod_campaigns:()=>modList('mLCamp','crm_campaigns_list',{},[['name','Nome'],['subject','Oggetto'],['status','Stato'],['scheduled_at','Pianificata','date'],['sent_at','Inviata','date']]),
+  mod_sequences:()=>modList('mLSeq','crm_sequences_list',{},[['name','Nome'],['description','Descrizione'],['active','Stato','bool'],['steps_count','Step'],['created_at','Creata','date']]),
+  mod_workflows:()=>modList('mLWf','crm_workflows_list',{},[['name','Nome'],['entity','Entità'],['trigger_event','Evento'],['active','Stato','bool'],['last_run_at','Ultima esec.','date']]),
+  mod_desk:()=>modList('mLDesk','crm_tickets_list',{},[['number','#'],['subject','Oggetto'],['status','Stato'],['priority','Priorità'],['contact_name','Contatto'],['created_at','Creato','date']]),
+  mod_webforms:()=>modList('mLWf2','crm_webforms_list',{},[['name','Nome'],['slug','Slug'],['title','Titolo'],['active','Stato','bool'],['created_at','Creato','date']]),
+  mod_messaging:()=>modList('mLMsg','crm_conversations_list',{},[['channel','Canale'],['contact_name','Contatto'],['phone','Telefono'],['last_message','Ultimo messaggio'],['last_at','Quando','date']]),
+  mod_calls:()=>modList('mLCalls','crm_calls_list',{},[['direction','Direzione'],['contact_name','Contatto'],['from_number','Da'],['to_number','A'],['status','Stato'],['started_at','Inizio','date']]),
+  mod_agent:()=>modList('mLAgent','crm_agents_list',{},[['name','Nome'],['model','Modello'],['created_at','Creato','date']])
+};
+
 /* --- Catalogo moduli multi-tenant --- */
 const MODULES=[
   {key:'crm',label:'CRM',ic:'grid'},
@@ -1604,6 +1899,15 @@ const MODULES=[
   {key:'signature',label:'Firma digitale',ic:'check'},
   {key:'segretario',label:'Segretario',ic:'buoy'},
   {key:'wealthview',label:'WealthView',ic:'chart'},
+  {key:'social',label:'Social',ic:'share'},
+  {key:'campaigns',label:'Campagne',ic:'send'},
+  {key:'sequences',label:'Sequenze',ic:'zap'},
+  {key:'workflows',label:'Workflow',ic:'zap'},
+  {key:'desk',label:'Assistenza',ic:'buoy'},
+  {key:'webforms',label:'Web form',ic:'grid'},
+  {key:'messaging',label:'Messaggi',ic:'mail'},
+  {key:'calls',label:'Chiamate',ic:'phone'},
+  {key:'agent',label:'Agente AI',ic:'spark'},
 ];
 const MODULE_LABEL=Object.fromEntries(MODULES.map(m=>[m.key,m.label]));
 const MODULE_ORDER=MODULES.map(m=>m.key);
