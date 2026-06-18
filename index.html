@@ -172,6 +172,8 @@
   .deal .dm{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
   .kcol.over{outline:2px dashed var(--primary);outline-offset:-2px;background:var(--primary-soft)}
   .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .tabs.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  .tabs.scroll .tab{white-space:nowrap;flex:0 0 auto}
   .tab{padding:7px 14px;border-radius:8px;background:var(--surface);border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:600;color:var(--text-2);transition:.13s}
   .tab:hover{background:var(--surface-2)}
   .tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
@@ -1346,9 +1348,10 @@ window.wireSuperadmin=wireSuperadmin;
 
 /* ===================== MODULO SEGRETARIO: SCADENZARIO ===================== */
 /* Stato locale della vista Scadenzario */
-const SEG={ filter:'all', items:[], tab:'scadenzario' };
-const SEG_TABS=[['scadenzario','Scadenzario'],['anagrafica','Anagrafica'],['imu','IMU'],['locazioni','Locazioni'],['f24','F24'],['dichiarazioni','Dichiarazioni'],['condominio','Condominio']];
-function segSetTab(t){SEG.tab=t;render('mod_segretario');}
+const SEG={ filter:'all', items:[], tab:'panoramica' };
+const SEG_TABS=[['panoramica','Panoramica'],['scadenzario','Scadenzario'],['anagrafica','Anagrafica'],['imu','IMU'],['locazioni','Affitti/Locazioni'],['f24','F24'],['dichiarazioni','730/Dichiarazioni'],['forfettari','Forfettari'],['semplificato','Semplificato'],['inps','INPS'],['inail','INAIL'],['condominio','Condominio'],['firma','Firma digitale']];
+function segSetTab(t){if(t==='firma'){segGoSignature();return;}SEG.tab=t;render('mod_segretario');}
+function segGoSignature(){current='mod_signature';document.querySelectorAll('.navitem').forEach(n=>n.classList.toggle('active',n.dataset.view==='mod_signature'));render('mod_signature');}
 function segPermErr(e){const m=segErr(e);return /admin|permess|denied|negato|insufficient/i.test(m)?'Permesso negato':m;}
 const SEG_REC={none:'Nessuna',monthly:'Mensile',quarterly:'Trimestrale',semiannual:'Semestrale',yearly:'Annuale',custom:'Personalizzata'};
 function segRecLbl(r){return SEG_REC[r]||esc(r||'Nessuna');}
@@ -1376,15 +1379,20 @@ function vSegretario(){
   const subtabs=SEG_TABS.map(([k,l])=>`<div class="tab ${SEG.tab===k?'active':''}" onclick="segSetTab('${k}')">${esc(l)}</div>`).join('');
   let body='';
   switch(SEG.tab){
+    case 'panoramica': body=segViewPanoramica(); break;
     case 'anagrafica': body=segViewAnagrafica(); break;
     case 'imu': body=segViewImu(); break;
     case 'locazioni': body=segViewLocazioni(); break;
     case 'f24': body=segViewF24(); break;
     case 'dichiarazioni': body=segViewDichiarazioni(); break;
+    case 'forfettari': body=segViewForfettari(); break;
+    case 'semplificato': body=segViewSemplificato(); break;
+    case 'inps': body=segViewInps(); break;
+    case 'inail': body=segViewInail(); break;
     case 'condominio': body=segViewCondominio(); break;
     default: body=segViewScadenzario();
   }
-  return `<div class="tabs">${subtabs}</div>${body}`;
+  return `<div class="tabs scroll">${subtabs}</div>${body}`;
 }
 function segViewScadenzario(){
   const f=SEG.filter;
@@ -1419,6 +1427,7 @@ function segViewScadenzario(){
 function segSetFilter(f){SEG.filter=f;render('mod_segretario');}
 window.segLoad=async function(){
   if(mode!=='auth')return;
+  if(SEG.tab==='panoramica'){ if(window.segLoadPanoramica)window.segLoadPanoramica(); return; }
   if(SEG.tab!=='scadenzario'){ if(window.segTabLoad)window.segTabLoad(); return; }
   const el=document.getElementById('segList');if(!el)return;
   el.innerHTML='<div class="empty">Caricamento…</div>';
@@ -1730,7 +1739,7 @@ function segViewImu(){
       {id:'im_mesi',label:'Mesi possesso',type:'number',val:'12'},
       {id:'im_abit',label:'Abitazione principale',type:'select',opts:[['no','No'],['si','Sì']]}
     ]
-  });
+  })+`<div style="margin-top:16px">${segImuCalcCard()}</div>`;
 }
 function segLoadImu(){segFiscalLoad('segImu','seg_imu_properties_list',{},[['label','Etichetta'],['comune','Comune'],['categoria_catastale','Categoria'],['rendita_catastale','Rendita'],['quota_possesso','Quota %'],['mesi_possesso','Mesi'],['abitazione_principale','Ab. princ.','bool']],'segDelImu');}
 function segCreateImu(){
@@ -1760,7 +1769,7 @@ function segViewLocazioni(){
       {id:'lc_aliquota',label:'Aliquota cedolare (%)',type:'number',val:'21'},
       {id:'lc_inizio',label:'Data inizio',type:'date'}
     ]
-  });
+  })+`<div style="margin-top:16px">${segLocCalcCard()}</div>`;
 }
 function segLoadLocazioni(){segFiscalLoad('segLoc','seg_rent_contracts_list',{},[['tenant_name','Inquilino'],['immobile_descr','Immobile'],['canone_mensile','Canone'],['tipo_contratto','Tipo'],['regime','Regime'],['aliquota_cedolare','Aliq. %'],['data_inizio','Inizio'],['stato','Stato']],'segDelLoc');}
 function segCreateLoc(){
@@ -1786,7 +1795,7 @@ function segViewF24(){
       {id:'f4_data',label:'Data versamento',type:'date'},
       {id:'f4_stato',label:'Stato',type:'select',opts:[['bozza','Bozza'],['pronto','Pronto'],['versato','Versato']]}
     ]
-  });
+  })+`<div style="margin-top:16px">${segF24CalcCard()}</div>`;
 }
 function segLoadF24(){segFiscalLoad('segF24','seg_f24_list',{},[['tipo','Tipo'],['anno_riferimento','Anno'],['data_versamento','Versamento'],['totale','Totale'],['stato','Stato']],'segDelF24');}
 function segCreateF24(){
@@ -1808,7 +1817,7 @@ function segViewDichiarazioni(){
       {id:'dc_anno',label:'Anno d\'imposta *',type:'number',ph:'2025'},
       {id:'dc_stato',label:'Stato',type:'select',opts:[['bozza','Bozza'],['inviata','Inviata'],['accettata','Accettata']]}
     ]
-  });
+  })+`<div style="margin-top:16px">${segIrpefCalcCard()}</div>`;
 }
 function segLoadDichiarazioni(){segFiscalLoad('segDic','seg_declarations_list',{},[['tipo','Tipo'],['anno_imposta','Anno'],['stato','Stato'],['imposta_netta','Imp. netta'],['saldo','Saldo']],'segDelDic');}
 function segCreateDic(){
@@ -1837,6 +1846,329 @@ function segCreateCondo(){
   segFiscalCreate('seg_condo_create',{p_nome:nome,p_indirizzo:gv('co_indirizzo')||null,p_comune:gv('co_comune')||null},'segCondo',segLoadCondominio);
 }
 function segDelCondo(id){segFiscalDelete('seg_condo_delete',id,segLoadCondominio);}
+
+/* ===================== SEGRETARIO — CALCOLATORI & SCHEDE INFORMATIVE ===================== */
+/* Helper numerici condivisi per i calcolatori client-side. */
+function segNum(id){const n=parseFloat(String(gv(id)).replace(/\./g,'').replace(',','.'));return Number.isFinite(n)?n:0;}
+function segChecked(id){const e=document.getElementById(id);return !!(e&&e.checked);}
+function segEur(n){if(!Number.isFinite(n))return '€0,00';return '€'+n.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function segPct(n){if(!Number.isFinite(n))return '0%';return n.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';}
+function segResult(id,html){const el=document.getElementById(id);if(el)el.innerHTML=html;}
+/* Calcolo IRPEF lorda secondo gli scaglioni 2024 (3 aliquote). */
+function segIrpefLorda(imponibile){
+  const x=Math.max(0,imponibile||0);
+  let t=0;
+  t+=Math.min(x,28000)*0.23;
+  if(x>28000)t+=(Math.min(x,50000)-28000)*0.35;
+  if(x>50000)t+=(x-50000)*0.43;
+  return t;
+}
+
+/* ---- Panoramica (dashboard) ---- */
+function segViewPanoramica(){
+  return note('<b>Panoramica.</b> Riepilogo delle scadenze in arrivo e dei principali adempimenti gestiti dallo studio. Usa le schede in alto per anagrafica, calcolatori fiscali e adempimenti.')+
+  `<div class="kpis" id="segPanoKpis">
+    <div class="card kpi"><small>${icon('bell')}Scadenze aperte</small><div class="v" id="segKpiOpen">…</div><div class="d up">${icon('list')}da gestire</div></div>
+    <div class="card kpi"><small>${icon('warn')}Scadute</small><div class="v" id="segKpiOver">…</div><div class="d down">${icon('warn')}in ritardo</div></div>
+    <div class="card kpi"><small>${icon('calendar')}Prossimi 30 giorni</small><div class="v" id="segKpiSoon">…</div><div class="d up">${icon('calendar')}in arrivo</div></div>
+    <div class="card kpi"><small>${icon('check')}Completate</small><div class="v" id="segKpiDone">…</div><div class="d up">${icon('check')}archiviate</div></div>
+  </div>
+  <div class="grid2" style="align-items:start;margin-top:14px">
+    <div class="card"><div class="sa-head">${icon('bell')}<h3>Scadenze in arrivo</h3><button class="btn ghost sm" onclick="segSetTab('scadenzario')">${icon('arrowRight')}Apri scadenzario</button></div>
+      <div id="segPanoList"><div class="empty">Caricamento…</div></div></div>
+    <div class="card"><div class="sa-head">${icon('zap')}<h3>Calcolatori rapidi</h3></div>
+      <p class="sa-sub">Strumenti di calcolo fiscale client-side, sempre aggiornati agli scaglioni vigenti.</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn ghost" onclick="segSetTab('imu')">${icon('building')}Calcolatore IMU</button>
+        <button class="btn ghost" onclick="segSetTab('locazioni')">${icon('card')}Cedolare secca vs IRPEF</button>
+        <button class="btn ghost" onclick="segSetTab('f24')">${icon('repeat')}Ravvedimento operoso</button>
+        <button class="btn ghost" onclick="segSetTab('dichiarazioni')">${icon('chart')}IRPEF a scaglioni</button>
+        <button class="btn ghost" onclick="segSetTab('forfettari')">${icon('spark')}Regime forfettario</button>
+        <button class="btn ghost" onclick="segSetTab('inps')">${icon('users')}Contributi INPS</button>
+      </div></div>
+  </div>`;
+}
+window.segLoadPanoramica=async function(){
+  const list=document.getElementById('segPanoList');
+  try{
+    const data=await rpc('seg_deadlines_list',{p_status:null});
+    let items=Array.isArray(data)?data:(data?[data]:[]);
+    const open=items.filter(x=>x.status!=='done');
+    let over=0,soon=0,done=items.length-open.length;
+    open.forEach(it=>{const dl=segDaysLeft(it.due_date);if(dl!==null&&dl<0)over++;else if(dl!==null&&dl<=30)soon++;});
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=String(v);};
+    set('segKpiOpen',open.length);set('segKpiOver',over);set('segKpiSoon',soon);set('segKpiDone',done);
+    if(!list)return;
+    const upcoming=open.slice().sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||''))).slice(0,8);
+    if(!upcoming.length){list.innerHTML='<div class="empty">Nessuna scadenza aperta.</div>';return;}
+    list.innerHTML='<div class="actlist">'+upcoming.map(it=>`<div class="actrow"><span class="dot" style="background:var(--primary)"></span><div><div class="t">${esc(it.title||'—')}</div><div class="s">${it.category?esc(it.category):'Generale'} · ${esc(it.due_date||'—')}</div></div><div style="margin-left:auto">${segDueBadge(it.due_date,it.status)}</div></div>`).join('')+'</div>';
+  }catch(e){
+    if(list)list.innerHTML=`<div class="empty">${esc(segPermErr(e))}</div>`;
+  }
+};
+
+/* ---- Calcolatore IMU (scheda IMU) ---- */
+const SEG_IMU_MOLT=[['160','160 — A (escl. A/10), C/2, C/6, C/7'],['140','140 — B, C/3, C/4, C/5'],['80','80 — A/10, D/5'],['65','65 — D (escl. D/5)'],['55','55 — C/1']];
+function segImuCalcCard(){
+  return `<div class="card"><div class="sa-head">${icon('building')}<h3>Calcolatore IMU</h3></div>
+    <p class="sa-sub">Base imponibile = rendita catastale × 1,05 × moltiplicatore. Imposta = base × quota × mesi/12 × aliquota‰.</p>
+    <div class="ff"><label>Rendita catastale (€)</label><input id="imc_rendita" type="number" placeholder="es. 900"></div>
+    <div class="ff"><label>Moltiplicatore (categoria catastale)</label><select id="imc_molt">${SEG_IMU_MOLT.map(o=>`<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select></div>
+    <div class="ff"><label>Quota di possesso (%)</label><input id="imc_quota" type="number" value="100"></div>
+    <div class="ff"><label>Mesi di possesso</label><input id="imc_mesi" type="number" value="12"></div>
+    <div class="ff"><label>Aliquota comunale (‰)</label><input id="imc_aliq" type="number" value="10.6" placeholder="es. 10,6"></div>
+    <button class="btn" onclick="segCalcImu()">${icon('zap')}Calcola IMU</button>
+    <div id="imc_out" style="margin-top:12px"></div></div>`;
+}
+function segCalcImu(){
+  const rendita=segNum('imc_rendita'),molt=segNum('imc_molt'),quota=segNum('imc_quota')/100,mesi=Math.min(12,Math.max(0,segNum('imc_mesi'))),aliq=segNum('imc_aliq')/1000;
+  const base=rendita*1.05*molt;
+  const imposta=base*quota*(mesi/12)*aliq;
+  segResult('imc_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Base imponibile</span><b>${segEur(base)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Imposta annua (quota ${segPct(quota*100)}, ${esc(String(mesi))} mesi)</span><b style="color:var(--primary)">${segEur(imposta)}</b></div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-3);font-size:12px;margin-top:4px"><span>Acconto (50%)</span><span>${segEur(imposta/2)}</span></div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-3);font-size:12px"><span>Saldo (50%)</span><span>${segEur(imposta/2)}</span></div>
+  </div></div>`);
+}
+
+/* ---- Calcolatore Cedolare secca / IRPEF (scheda Locazioni) ---- */
+function segLocCalcCard(){
+  return `<div class="card"><div class="sa-head">${icon('card')}<h3>Cedolare secca vs IRPEF</h3></div>
+    <p class="sa-sub">Confronto tra cedolare secca e tassazione ordinaria IRPEF sul reddito da locazione.</p>
+    <div class="ff"><label>Canone annuo (€)</label><input id="ced_canone" type="number" placeholder="es. 9600"></div>
+    <div class="ff"><label>Tipo cedolare</label><select id="ced_tipo"><option value="21">Ordinaria 21%</option><option value="10">Canone concordato 10%</option></select></div>
+    <div class="ff"><label>Aliquota IRPEF marginale stimata (%)</label><input id="ced_irpef" type="number" value="35" placeholder="es. 35"></div>
+    <p class="sa-sub" style="margin-top:-4px">Per il regime ordinario la base imponibile IRPEF è ridotta del 5% (deduzione forfettaria).</p>
+    <button class="btn" onclick="segCalcCedolare()">${icon('zap')}Confronta</button>
+    <div id="ced_out" style="margin-top:12px"></div></div>`;
+}
+function segCalcCedolare(){
+  const canone=segNum('ced_canone'),aliqCed=segNum('ced_tipo')/100,marg=segNum('ced_irpef')/100;
+  const cedolare=canone*aliqCed;
+  const baseOrd=canone*0.95;
+  const ordinaria=baseOrd*marg;
+  const conv=ordinaria-cedolare;
+  segResult('ced_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Cedolare secca (${segPct(aliqCed*100)})</span><b style="color:var(--primary)">${segEur(cedolare)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>IRPEF ordinaria (base 95% × ${segPct(marg*100)})</span><b>${segEur(ordinaria)}</b></div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Risparmio con cedolare</span><b style="color:${conv>=0?'var(--green)':'var(--red)'}">${segEur(conv)}</b></div>
+    <div style="color:var(--text-3);font-size:12px;margin-top:6px">La cedolare sostituisce IRPEF, addizionali, imposta di registro e bollo sulle annualità.</div>
+  </div></div>`);
+}
+
+/* ---- Calcolatore Ravvedimento operoso (scheda F24) ---- */
+function segF24CalcCard(){
+  return `<div class="card"><div class="sa-head">${icon('repeat')}<h3>Ravvedimento operoso</h3></div>
+    <p class="sa-sub">Sanzione ridotta a scaglioni + interessi legali sull'imposta non versata.</p>
+    <div class="ff"><label>Imposta dovuta (€)</label><input id="rav_imp" type="number" placeholder="es. 1000"></div>
+    <div class="ff"><label>Giorni di ritardo</label><input id="rav_gg" type="number" placeholder="es. 45"></div>
+    <div class="ff"><label>Tasso legale annuo (%)</label><input id="rav_tasso" type="number" value="2.5" placeholder="es. 2,5"></div>
+    <button class="btn" onclick="segCalcRavvedimento()">${icon('zap')}Calcola ravvedimento</button>
+    <div id="rav_out" style="margin-top:12px"></div></div>`;
+}
+function segCalcRavvedimento(){
+  const imp=segNum('rav_imp'),gg=Math.max(0,Math.round(segNum('rav_gg'))),tasso=segNum('rav_tasso');
+  let aliq=0,lbl='';
+  if(gg<=0){aliq=0;lbl='Nessun ritardo';}
+  else if(gg<=14){aliq=0.001*gg;lbl='Sprint: 0,1% per giorno ('+gg+'gg)';}
+  else if(gg<=30){aliq=0.015;lbl='Entro 30 giorni: 1,5%';}
+  else if(gg<=90){aliq=0.0167;lbl='Entro 90 giorni: 1,67%';}
+  else if(gg<=365){aliq=0.0375;lbl='Entro l\'anno: 3,75%';}
+  else{aliq=0.0429;lbl='Oltre l\'anno: 4,29%';}
+  const sanzione=imp*aliq;
+  const interessi=imp*(tasso/100)*(gg/365);
+  const tot=imp+sanzione+interessi;
+  segResult('rav_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Scaglione</span><span class="pill amb" style="font-size:11px">${esc(lbl)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px"><span>Sanzione ridotta (${segPct(aliq*100)})</span><b>${segEur(sanzione)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Interessi legali (${segPct(tasso)} × ${gg}gg)</span><b>${segEur(interessi)}</b></div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Totale da versare</span><b style="color:var(--primary)">${segEur(tot)}</b></div>
+  </div></div>`);
+}
+
+/* ---- Calcolatore IRPEF (scheda Dichiarazioni) ---- */
+function segIrpefCalcCard(){
+  return `<div class="card"><div class="sa-head">${icon('chart')}<h3>Calcolatore IRPEF 2024</h3></div>
+    <p class="sa-sub">Scaglioni: 23% fino a 28.000 €, 35% da 28.000 a 50.000 €, 43% oltre 50.000 €.</p>
+    <div class="ff"><label>Reddito imponibile (€)</label><input id="irp_imp" type="number" placeholder="es. 35000"></div>
+    <div class="ff"><label>Addizionale regionale (%) — stima opzionale</label><input id="irp_reg" type="number" value="1.7" placeholder="es. 1,7"></div>
+    <div class="ff"><label>Addizionale comunale (%) — stima opzionale</label><input id="irp_com" type="number" value="0.8" placeholder="es. 0,8"></div>
+    <button class="btn" onclick="segCalcIrpef()">${icon('zap')}Calcola IRPEF</button>
+    <div id="irp_out" style="margin-top:12px"></div></div>`;
+}
+function segCalcIrpef(){
+  const imp=segNum('irp_imp'),reg=segNum('irp_reg')/100,com=segNum('irp_com')/100;
+  const lorda=segIrpefLorda(imp);
+  const addReg=imp*reg,addCom=imp*com;
+  const eff=imp>0?(lorda/imp*100):0;
+  const tot=lorda+addReg+addCom;
+  segResult('irp_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>IRPEF lorda</span><b style="color:var(--primary)">${segEur(lorda)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Aliquota effettiva</span><b>${segPct(eff)}</b></div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-3);font-size:12px;margin-top:4px"><span>Addizionale regionale (stima)</span><span>${segEur(addReg)}</span></div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-3);font-size:12px"><span>Addizionale comunale (stima)</span><span>${segEur(addCom)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Totale stimato</span><b>${segEur(tot)}</b></div>
+    <div style="color:var(--text-3);font-size:12px;margin-top:6px">La cifra è al lordo di detrazioni per lavoro/carichi familiari, che riducono l'imposta netta.</div>
+  </div></div>`);
+}
+
+/* ---- Forfettari ---- */
+const SEG_FORF_COEFF=[['78','Professionisti — 78%'],['62','Intermediari del commercio — 62%'],['40','Commercio/alimentari e bevande — 40%'],['67','Altre attività — 67%'],['86','Costruzioni e attività immobiliari — 86%'],['40b','Commercio ambulante alimentari — 40%'],['54','Commercio ambulante altri prodotti — 54%']];
+function segViewForfettari(){
+  return note('<b>Regime forfettario.</b> Calcolo del reddito imponibile, dell\'imposta sostitutiva (15% o 5% startup) e dei contributi INPS stimati. Strumento client-side a fini indicativi.')+
+  `<div class="grid2" style="align-items:start">
+    <div class="card"><div class="sa-head">${icon('spark')}<h3>Calcolatore forfettario</h3></div>
+      <div class="ff"><label>Ricavi / compensi annui (€)</label><input id="ff_ricavi" type="number" placeholder="es. 50000"></div>
+      <div class="ff"><label>Coefficiente di redditività</label><select id="ff_coeff">${SEG_FORF_COEFF.map(o=>`<option value="${o[0]}">${esc(o[1])}</option>`).join('')}</select></div>
+      <div class="ff" style="flex-direction:row;align-items:center;gap:8px"><input id="ff_startup" type="checkbox" style="width:auto"><label style="margin:0">Imposta sostitutiva ridotta 5% (startup, primi 5 anni)</label></div>
+      <div class="ff"><label>Gestione contributiva</label><select id="ff_gest"><option value="sep">Gestione separata INPS (26,07%)</option><option value="art">Artigiani/Commercianti (fisso + %)</option></select></div>
+      <button class="btn" onclick="segCalcForfettario()">${icon('zap')}Calcola</button>
+      <div id="ff_out" style="margin-top:12px"></div></div>
+    <div class="card"><div class="sa-head">${icon('info')}<h3>Note sul regime</h3></div>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.7">
+        <li>Limite ricavi/compensi: <b>85.000 €</b> annui.</li>
+        <li>Reddito imponibile = ricavi × coefficiente di redditività (no deduzione costi analitici).</li>
+        <li>Imposta sostitutiva <b>15%</b> (o <b>5%</b> per nuove attività nei primi 5 anni, se requisiti).</li>
+        <li>Sostituisce IRPEF, addizionali e IRAP; niente IVA in fattura.</li>
+        <li>Contributi previdenziali deducibili dal reddito imponibile.</li>
+      </ul></div>
+  </div>`;
+}
+function segCalcForfettario(){
+  const ricavi=segNum('ff_ricavi');
+  const cv=String(gv('ff_coeff'));
+  const coeffMap={'78':0.78,'62':0.62,'40':0.40,'67':0.67,'86':0.86,'40b':0.40,'54':0.54};
+  const coeff=coeffMap[cv]||0.67;
+  const startup=segChecked('ff_startup');
+  const redditoLordo=ricavi*coeff;
+  // Contributi stimati (calcolati sul reddito lordo prima dell'imposta)
+  let contributi=0,contrLbl='';
+  if(gv('ff_gest')==='art'){
+    const fisso=4515,minimale=18555,aliqEcc=0.24;
+    contributi=fisso+(redditoLordo>minimale?(redditoLordo-minimale)*aliqEcc:0);
+    contrLbl='Artigiani/Commercianti: fisso '+segEur(fisso)+' + 24% oltre '+segEur(minimale);
+  }else{
+    contributi=redditoLordo*0.2607;
+    contrLbl='Gestione separata: 26,07% sul reddito';
+  }
+  const imponibile=Math.max(0,redditoLordo-contributi);
+  const aliqImp=startup?0.05:0.15;
+  const imposta=imponibile*aliqImp;
+  const netto=ricavi-contributi-imposta;
+  segResult('ff_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Reddito lordo (ricavi × ${segPct(coeff*100)})</span><b>${segEur(redditoLordo)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Contributi INPS stimati</span><b>${segEur(contributi)}</b></div>
+    <div style="color:var(--text-3);font-size:12px">${esc(contrLbl)}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px"><span>Imponibile (al netto contributi)</span><b>${segEur(imponibile)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Imposta sostitutiva (${segPct(aliqImp*100)})</span><b style="color:var(--primary)">${segEur(imposta)}</b></div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Reddito netto stimato</span><b style="color:var(--green)">${segEur(netto)}</b></div>
+  </div></div>`);
+}
+
+/* ---- Semplificato ---- */
+function segViewSemplificato(){
+  return note('<b>Contabilità semplificata.</b> Adempimenti tipici e calcolatore IRPEF/IVA per imprese minori e professionisti in regime ordinario semplificato.')+
+  `<div class="grid2" style="align-items:start">
+    <div class="card"><div class="sa-head">${icon('chart')}<h3>Calcolatore IRPEF / IVA</h3></div>
+      <p class="sa-sub">Reddito = ricavi − costi. IVA a debito = (IVA su vendite) − (IVA su acquisti).</p>
+      <div class="ff"><label>Ricavi annui (€)</label><input id="smp_ricavi" type="number" placeholder="es. 80000"></div>
+      <div class="ff"><label>Costi deducibili (€)</label><input id="smp_costi" type="number" placeholder="es. 30000"></div>
+      <div class="ff"><label>IVA su vendite (€)</label><input id="smp_ivav" type="number" placeholder="es. 17600"></div>
+      <div class="ff"><label>IVA su acquisti detraibile (€)</label><input id="smp_ivaa" type="number" placeholder="es. 6600"></div>
+      <button class="btn" onclick="segCalcSemplificato()">${icon('zap')}Calcola</button>
+      <div id="smp_out" style="margin-top:12px"></div></div>
+    <div class="card"><div class="sa-head">${icon('list')}<h3>Adempimenti ricorrenti</h3></div>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.7">
+        <li><b>LIPE</b> — Liquidazione periodica IVA: trimestrale o mensile.</li>
+        <li><b>Versamento IVA</b> — entro il 16 del mese/trimestre successivo.</li>
+        <li><b>Dichiarazione IVA annuale</b> — entro il 30 aprile.</li>
+        <li><b>Dichiarazione dei Redditi (Redditi PF/SP)</b> — entro il 30 settembre/15 ottobre.</li>
+        <li><b>Acconti</b> — 1° acconto a giugno, 2° acconto a novembre.</li>
+        <li><b>ISA</b> — Indici Sintetici di Affidabilità allegati alla dichiarazione.</li>
+        <li><b>Certificazione Unica e 770</b> — per i sostituti d'imposta.</li>
+      </ul></div>
+  </div>`;
+}
+function segCalcSemplificato(){
+  const ricavi=segNum('smp_ricavi'),costi=segNum('smp_costi'),ivav=segNum('smp_ivav'),ivaa=segNum('smp_ivaa');
+  const reddito=Math.max(0,ricavi-costi);
+  const irpef=segIrpefLorda(reddito);
+  const ivaDeb=ivav-ivaa;
+  const eff=reddito>0?(irpef/reddito*100):0;
+  segResult('smp_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Reddito imponibile</span><b>${segEur(reddito)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>IRPEF lorda (scaglioni)</span><b style="color:var(--primary)">${segEur(irpef)}</b></div>
+    <div style="display:flex;justify-content:space-between"><span>Aliquota effettiva</span><b>${segPct(eff)}</b></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px"><span>IVA ${ivaDeb>=0?'a debito':'a credito'}</span><b style="color:${ivaDeb>=0?'var(--red)':'var(--green)'}">${segEur(Math.abs(ivaDeb))}</b></div>
+  </div></div>`);
+}
+
+/* ---- INPS ---- */
+function segViewInps(){
+  return note('<b>INPS — contributi previdenziali.</b> Calcolatore per Gestione Separata e Artigiani/Commercianti. Valori indicativi sulle aliquote e i minimali vigenti.')+
+  `<div class="grid2" style="align-items:start">
+    <div class="card"><div class="sa-head">${icon('users')}<h3>Calcolatore contributi INPS</h3></div>
+      <div class="ff"><label>Modalità</label><select id="inps_mod" onchange="segInpsToggle()"><option value="sep">Gestione Separata (26,07%)</option><option value="art">Artigiani / Commercianti</option></select></div>
+      <div class="ff"><label>Reddito imponibile (€)</label><input id="inps_reddito" type="number" placeholder="es. 30000"></div>
+      <div class="ff" id="inps_aliqRow"><label>Aliquota gestione separata (%)</label><input id="inps_aliq" type="number" value="26.07"></div>
+      <button class="btn" onclick="segCalcInps()">${icon('zap')}Calcola contributi</button>
+      <div id="inps_out" style="margin-top:12px"></div></div>
+    <div class="card"><div class="sa-head">${icon('info')}<h3>Riferimenti</h3></div>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.7">
+        <li><b>Gestione Separata</b>: aliquota ~26,07% (professionisti senza cassa); ~24% se già assicurati altrove.</li>
+        <li><b>Artigiani/Commercianti</b>: contributo fisso (~4.515 €) sul minimale (~18.555 €) + ~24% sul reddito eccedente.</li>
+        <li>Massimale contributivo annuo per la gestione separata (~119.650 €).</li>
+        <li>I contributi versati sono deducibili dal reddito imponibile IRPEF.</li>
+      </ul></div>
+  </div>`;
+}
+function segInpsToggle(){
+  const art=gv('inps_mod')==='art';
+  const row=document.getElementById('inps_aliqRow');
+  if(row)row.style.display=art?'none':'';
+}
+function segCalcInps(){
+  const reddito=segNum('inps_reddito');
+  let contributi=0,detail='';
+  if(gv('inps_mod')==='art'){
+    const fisso=4515,minimale=18555,aliqEcc=0.24;
+    contributi=fisso+(reddito>minimale?(reddito-minimale)*aliqEcc:0);
+    detail='Fisso '+segEur(fisso)+' (minimale '+segEur(minimale)+') + 24% sull\'eccedenza';
+  }else{
+    const aliq=segNum('inps_aliq')/100||0.2607;
+    contributi=reddito*aliq;
+    detail='Gestione separata: '+segPct(aliq*100)+' sul reddito';
+  }
+  segResult('inps_out',`<div class="callout"><div>
+    <div style="display:flex;justify-content:space-between"><span>Contributi annui stimati</span><b style="color:var(--primary)">${segEur(contributi)}</b></div>
+    <div style="color:var(--text-3);font-size:12px;margin-top:4px">${esc(detail)}</div>
+    <div style="display:flex;justify-content:space-between;color:var(--text-3);font-size:12px;margin-top:4px"><span>Rata mensile indicativa</span><span>${segEur(contributi/12)}</span></div>
+  </div></div>`);
+}
+
+/* ---- INAIL (scheda informativa) ---- */
+function segViewInail(){
+  return note('<b>INAIL — assicurazione contro gli infortuni.</b> Scheda informativa: obblighi, scadenze tipiche e modalità di calcolo del premio. Nessun dato è inventato; si tratta di informazioni procedurali standard.')+
+  `<div class="grid2" style="align-items:start">
+    <div class="card"><div class="sa-head">${icon('shield')}<h3>Obblighi e adempimenti</h3></div>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.7">
+        <li><b>Apertura PAT</b> (Posizione Assicurativa Territoriale) all'avvio dell'attività con dipendenti o assimilati.</li>
+        <li><b>Denuncia di esercizio</b> contestuale all'inizio dei lavori a rischio.</li>
+        <li><b>Autoliquidazione del premio</b> annuale (modello 10/01): regolazione anno precedente + rata anticipata anno in corso.</li>
+        <li><b>Denuncia di infortunio</b> entro 48 ore dalla notizia per eventi con prognosi oltre 3 giorni.</li>
+        <li><b>Variazioni</b> (cessazione, modifica lavorazioni, retribuzioni presunte) da comunicare tempestivamente.</li>
+      </ul></div>
+    <div class="card"><div class="sa-head">${icon('calendar')}<h3>Scadenze tipiche e premio</h3></div>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.7">
+        <li><b>Autoliquidazione</b>: versamento premio entro <b>16 febbraio</b> (possibile rateazione in 4 rate trimestrali).</li>
+        <li><b>Dichiarazione retribuzioni</b>: invio telematico entro fine febbraio.</li>
+        <li><b>Premio</b> = retribuzioni imponibili × tasso di tariffa (per voce di lavorazione) ‰, con oscillazioni per andamento infortunistico.</li>
+        <li>Possibili riduzioni (es. OT23/sicurezza) e regime agevolato artigiani.</li>
+      </ul>
+      <p class="sa-sub" style="margin-top:10px">Il calcolo puntuale del premio dipende dalle voci di tariffa e dalle retribuzioni effettive: si rimanda alla posizione INAIL specifica.</p></div>
+  </div>`;
+}
 
 /* ===================== MODULI CRM — VISTE COLLEGATE AL BACKEND ===================== */
 /* Helper generico: vista a sola tabella per un modulo CRM. */
