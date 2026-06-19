@@ -893,16 +893,87 @@ let dragId=null;
 function wireDnd(){document.querySelectorAll('.deal').forEach(d=>{d.addEventListener('dragstart',()=>{dragId=d.dataset.id;d.classList.add('drag');});d.addEventListener('dragend',()=>d.classList.remove('drag'));});document.querySelectorAll('.kcol').forEach(col=>{col.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('over');});col.addEventListener('dragleave',()=>col.classList.remove('over'));col.addEventListener('drop',e=>{e.preventDefault();col.classList.remove('over');const d=DATA.deals.find(x=>String(x.id)===dragId);if(d){d.stage=col.dataset.stage;render('trattative');if(live && mode==='auth'){rpc('crm_move_deal',{p_deal:d.id,p_stage:d.stage}).then(()=>toast('Trattativa spostata e salvata su Supabase')).catch(err=>toast('Errore salvataggio: '+err.message));}}});});}
 function openContact(i){
   const c=DATA.contatti[i];const dl=DATA.deals.filter(d=>d.ref===c.n),ml=DATA.email.filter(m=>m.from===c.n);const az=DATA.aziende.find(a=>a.n===c.az)||{};
+  const isLive=live && mode==='auth' && c.id;
+  // Intestazione + sezioni statiche (già escapate in applyData/DATA)
   document.getElementById('drawer').innerHTML=`<div class="x" onclick="closeDrawer()">✕</div><div class="dhead"><div class="bigav" style="background:${ci(c.n)}">${initials(c.n)}</div><div><div style="font-size:18px;font-weight:700">${c.n}</div><div style="color:var(--text-3);margin-bottom:6px">${c.ruolo} · ${c.az}</div>${sp(c.stato)}</div></div>
   <div style="margin-bottom:14px"><span class="enrich">${icon('spark')}Dati arricchiti automaticamente dall'AI</span></div>
   <div class="ai-box"><div class="ai-h">${icon('spark')} Riepilogo AI cliente</div><ul><li>Cliente attivo con ${dl.length} trattativa/e aperte</li><li>Ultimo contatto via email · interesse alto</li><li>Valore potenziale: ${eur(c.val)}</li></ul></div>
-  <div class="field"><span>Email</span><b>${c.email}</b></div><div class="field"><span>Telefono</span><b><a class="lnk">${c.tel}</a></b></div><div class="field"><span>Settore <span class="enrich" style="padding:1px 6px">AI</span></span><b>${az.sett||'—'}</b></div><div class="field"><span>Dipendenti <span class="enrich" style="padding:1px 6px">AI</span></span><b>${az.dip||'—'}</b></div><div class="field"><span>Valore cliente</span><b>${eur(c.val)}</b></div>
+  <div class="field"><span>Email</span><b>${c.email||'—'}</b></div><div class="field"><span>Telefono</span><b><a class="lnk">${c.tel||'—'}</a></b></div><div class="field"><span>Settore <span class="enrich" style="padding:1px 6px">AI</span></span><b>${az.sett||'—'}</b></div><div class="field"><span>Dipendenti <span class="enrich" style="padding:1px 6px">AI</span></span><b>${az.dip||'—'}</b></div><div class="field"><span>Valore cliente</span><b>${eur(c.val)}</b></div>
   <div class="sechead">Trattative collegate</div>${dl.length?dl.map(d=>`<div class="field"><span>${d.n}</span><b>${eur(d.val)}</b></div>`).join(''):'<div style="color:var(--text-3);font-size:13px">Nessuna</div>'}
-  <div class="sechead">Email recenti</div>${ml.length?ml.map(m=>`<div class="field"><span>${m.sub}</span><b>${m.time}</b></div>`).join(''):'<div style="color:var(--text-3);font-size:13px">Nessuna</div>'}
-  <div style="margin-top:24px;display:flex;gap:10px"><button class="btn">${icon('mail')}Email</button><button class="btn ghost">${icon('phone')}Chiama</button><button class="btn ghost">${icon('plus')}Attività</button></div>`;
+  <div class="sechead">Descrizione</div><div id="ctDesc">${isLive?'<div style="color:var(--text-3);font-size:13px">Caricamento…</div>':''}</div>
+  <div class="sechead">Registro attività · Incontri &amp; Call</div><div id="ctActs">${isLive?'<div style="color:var(--text-3);font-size:13px">Caricamento…</div>':'<div style="color:var(--text-3);font-size:13px">Disponibile dopo l\'accesso.</div>'}</div>
+  ${isLive?'':note('<b>Descrizione e registro attività</b> sono disponibili dopo l\'accesso al tuo workspace.')}
+  <div style="margin-top:24px;display:flex;gap:10px"><button class="btn">${icon('mail')}Email</button><button class="btn ghost">${icon('phone')}Chiama</button></div>`;
   document.getElementById('drawer').classList.add('open');document.getElementById('overlay').classList.add('show');
+  if(isLive)contactLoadDetail(c.id);
 }
 function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('overlay').classList.remove('show');}
+
+/* ===== CONTATTO: dettaglio reale (descrizione + registro attività) ===== */
+function contactErr(e){const m=(e&&e.message?e.message:String(e))||'';if(/negato|denied|permess/i.test(m)){toast('Permesso negato');}else{toast('Errore: '+m);}}
+function fmtDate(s){if(!s)return '';const d=new Date(s);if(isNaN(d))return '';const p=n=>String(n).padStart(2,'0');return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear();}
+function actIcon(t){return {call:'phone',meeting:'users',note:'message',email:'mail'}[t]||'check';}
+function actLabel(t){return {call:'Call',meeting:'Incontro',note:'Nota',email:'Email'}[t]||esc(t);}
+async function contactLoadDetail(id){
+  // Descrizione
+  try{
+    const rows=await rpc('crm_contact_get',{p_contact:id});
+    const row=Array.isArray(rows)?rows[0]:rows;
+    const desc=row?(row.description||''):'';
+    const box=document.getElementById('ctDesc');
+    if(box)box.innerHTML=`<textarea id="ctDescTa" rows="4" style="width:100%;resize:vertical;font:inherit;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text)">${esc(desc)}</textarea>
+      <button class="btn sm" style="margin-top:8px" onclick="contactSaveDescription('${esc(id)}')">${icon('check')}Salva descrizione</button>`;
+  }catch(e){const box=document.getElementById('ctDesc');if(box)box.innerHTML='<div style="color:var(--text-3);font-size:13px">Descrizione non disponibile</div>';contactErr(e);}
+  // Attività
+  await contactRenderActivities(id);
+}
+async function contactRenderActivities(id){
+  const box=document.getElementById('ctActs');if(!box)return;
+  let timeline='<div style="color:var(--text-3);font-size:13px">Caricamento…</div>';
+  try{
+    const data=await rpc('crm_activities_for_contact',{p_contact:id});
+    const rows=Array.isArray(data)?data:(data?[data]:[]);
+    if(!rows.length){
+      timeline='<div style="color:var(--text-3);font-size:13px">Nessuna attività registrata.</div>';
+    }else{
+      timeline=rows.map(a=>{
+        const t=a.type||'note';const when=fmtDate(a.due_at||a.created_at);
+        const del=`<span title="Elimina" style="cursor:pointer;color:var(--red);font-size:15px;line-height:1" onclick="contactDeleteActivity('${esc(a.id)}','${esc(id)}')">×</span>`;
+        return `<div class="field" style="align-items:flex-start"><span style="display:flex;align-items:center;gap:7px;min-width:0">${icon(actIcon(t))}<span style="min-width:0"><b style="display:block">${esc(a.subject||actLabel(t))}</b>${a.notes?`<span style="color:var(--text-3);font-size:12.5px;display:block;white-space:pre-wrap">${esc(a.notes)}</span>`:''}<span style="color:var(--text-3);font-size:11.5px">${actLabel(t)}${when?' · '+when:''}</span></span></span>${del}</div>`;
+      }).join('');
+    }
+  }catch(e){timeline='<div style="color:var(--text-3);font-size:13px">Attività non disponibili</div>';contactErr(e);}
+  // Form aggiungi attività
+  const form=`<div class="sechead" style="margin-top:14px">Aggiungi attività</div>
+    <div class="ff"><label>Tipo</label><select id="ctAType"><option value="call">Call</option><option value="meeting">Incontro</option><option value="note">Nota</option><option value="email">Email</option></select></div>
+    <div class="ff"><label>Oggetto *</label><input id="ctASubj" placeholder="es. Call di follow-up"></div>
+    <div class="ff"><label>Descrizione / Note</label><textarea id="ctANotes" rows="3" style="resize:vertical"></textarea></div>
+    <div class="ff"><label>Data (opzionale)</label><input id="ctADate" type="date"></div>
+    <div id="ctAMsg" style="font-size:12.5px;color:var(--red);margin:0 0 8px"></div>
+    <button class="btn sm" onclick="contactAddActivity('${esc(id)}')">${icon('plus')}Registra attività</button>`;
+  box.innerHTML=timeline+form;
+}
+async function contactSaveDescription(id){
+  const ta=document.getElementById('ctDescTa');if(!ta)return;
+  try{await rpc('crm_set_description',{p_entity:'contacts',p_id:id,p_description:ta.value});toast('Descrizione salvata');}
+  catch(e){contactErr(e);}
+}
+async function contactAddActivity(id){
+  const subj=gv('ctASubj');const msg=document.getElementById('ctAMsg');
+  if(!subj){if(msg)msg.textContent='L\'oggetto è obbligatorio.';return;}
+  if(msg)msg.textContent='';
+  const type=gv('ctAType')||'note';const notes=gv('ctANotes');const date=gv('ctADate');
+  try{
+    await rpc('crm_add_activity',{p_subject:subj,p_type:type,p_notes:notes,p_due_at:date||null,p_contact:id,p_deal:null});
+    toast('Attività registrata');
+    await contactRenderActivities(id);
+  }catch(e){contactErr(e);}
+}
+async function contactDeleteActivity(actId,contactId){
+  if(!confirm('Eliminare questa attività?'))return;
+  try{await rpc('crm_delete_activity',{p_id:actId});toast('Attività eliminata');await contactRenderActivities(contactId);}
+  catch(e){contactErr(e);}
+}
 
 /* ===== SUPABASE: AUTENTICAZIONE + DATI (lettura/scrittura) ===== */
 const SUPA={url:'https://xargkgrqgbcpmxtrfjkz.supabase.co',key:'sb_publishable_qJucftqrLTUtkXeCZV4q0g_u_zP2wsh'};
