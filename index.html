@@ -2863,36 +2863,75 @@ function modLoadVoice(){
 }
 
 /* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
-const EN={commodity:'ele', last:null};
+const EN={commodity:'ele', last:null, draft:null};
 function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
 function enSetComm(x){EN.commodity=x;render('mod_energia');}
+function enFileToB64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const s=String(r.result);res(s.slice(s.indexOf(',')+1));};r.onerror=rej;r.readAsDataURL(file);});}
+async function enExtract(file){
+  if(!file)return;
+  const msg=document.getElementById('en_extract_msg');
+  if(file.size>20*1024*1024){if(msg){msg.style.color='var(--red)';msg.textContent='File troppo grande (max ~20 MB).';}return;}
+  if(msg){msg.style.color='var(--text-3)';msg.textContent='Lettura della bolletta in corso… (può richiedere qualche secondo)';}
+  try{
+    const data=await enFileToB64(file);
+    const res=await edgeFn('bill-extract',{mime:file.type||'application/octet-stream',data,filename:file.name});
+    EN.draft={
+      period_start:res.period_start||null, period_end:res.period_end||null,
+      consumption_total:(res.consumption_total??null), current_unit_price:(res.current_unit_price??null),
+      current_fixed_fee_year:(res.current_fixed_fee_year??null), postal_code:res.postal_code||null,
+      supplier:res.supplier||null
+    };
+    if(res.commodity==='ele'||res.commodity==='gas')EN.commodity=res.commodity;
+    render('mod_energia');
+    const conf=(typeof res.confidence==='number')?(' · affidabilità '+Math.round(res.confidence*100)+'%'):'';
+    toast('Dati estratti dalla bolletta'+conf+' — controlla e premi Analizza');
+  }catch(e){
+    const m=(e&&e.message?e.message:String(e));
+    if(/501|configur|ANTHROPIC|not.?ready|non.?disponibil/i.test(m)){
+      if(msg){msg.style.color='var(--amber)';msg.textContent='Estrazione automatica non ancora attiva (manca la API key Anthropic). Inserisci i dati a mano qui sotto.';}
+    }else{
+      if(msg){msg.style.color='var(--red)';msg.textContent='Non sono riuscito a leggere la bolletta ('+m+'). Inserisci i dati a mano.';}
+    }
+  }
+}
 function vEnergia(){
   if(mode!=='auth'){
     return note('<b>Energia — disponibile dopo l’accesso.</b> Accedi al tuo workspace per analizzare le bollette di luce e gas e generare proposte di risparmio. In modalità demo questa funzione non è attiva.');
   }
-  const c=EN.commodity, unit=c==='ele'?'kWh':'Smc';
-  return note('<b>Analisi bolletta luce e gas.</b> Inserisci i dati della bolletta: calcoliamo il risparmio confrontando la sola spesa “materia energia” con il catalogo offerte aggiornato e generiamo una proposta. Puoi trasformarla in lead con un clic.')+
+  const c=EN.commodity, unit=c==='ele'?'kWh':'Smc', d=EN.draft||{};
+  const val=(x)=>(x===null||x===undefined)?'':x;
+  return note('<b>Analisi bolletta luce e gas.</b> Carica una foto o il PDF della bolletta: leggiamo i dati in automatico, calcoliamo il risparmio confrontando la sola spesa “materia energia” con il catalogo offerte e generiamo una proposta. Puoi trasformarla in lead con un clic.')+
   `<div class="grid2" style="align-items:start">
     <div class="card">
       <h3>Dati bolletta</h3>
+      <div class="card" style="background:var(--surface-2);border:1px dashed var(--border);margin:8px 0 14px;box-shadow:none">
+        <div style="font-weight:600;margin-bottom:4px">📷 Carica la bolletta — compiliamo noi i campi</div>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">Scatta una foto, scegli un'immagine o carica il PDF.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label class="btn ghost sm" style="cursor:pointer">${icon('plus')}Scatta foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="enExtract(this.files[0])"></label>
+          <label class="btn ghost sm" style="cursor:pointer">Galleria<input type="file" accept="image/*" style="display:none" onchange="enExtract(this.files[0])"></label>
+          <label class="btn ghost sm" style="cursor:pointer">PDF<input type="file" accept="application/pdf" style="display:none" onchange="enExtract(this.files[0])"></label>
+        </div>
+        <div id="en_extract_msg" style="font-size:12.5px;color:var(--text-3);margin-top:10px"></div>
+      </div>
       <div class="tabs" style="margin:6px 0 14px">
         <div class="tab ${c==='ele'?'active':''}" onclick="enSetComm('ele')">⚡ Luce</div>
         <div class="tab ${c==='gas'?'active':''}" onclick="enSetComm('gas')">🔥 Gas</div>
       </div>
       <div class="grid2">
-        <div class="ff"><label>Periodo dal</label><input id="en_ps" type="date"></div>
-        <div class="ff"><label>Periodo al</label><input id="en_pe" type="date"></div>
+        <div class="ff"><label>Periodo dal</label><input id="en_ps" type="date" value="${val(d.period_start)}"></div>
+        <div class="ff"><label>Periodo al</label><input id="en_pe" type="date" value="${val(d.period_end)}"></div>
       </div>
-      <div class="ff"><label>Consumo del periodo (${unit}) *</label><input id="en_cons" type="number" step="any" placeholder="es. 600"></div>
-      <div class="ff"><label>Prezzo materia energia attuale (€/${unit}) *</label><input id="en_price" type="number" step="any" placeholder="es. 0.165"></div>
+      <div class="ff"><label>Consumo del periodo (${unit}) *</label><input id="en_cons" type="number" step="any" placeholder="es. 600" value="${val(d.consumption_total)}"></div>
+      <div class="ff"><label>Prezzo materia energia attuale (€/${unit}) *</label><input id="en_price" type="number" step="any" placeholder="es. 0.165" value="${val(d.current_unit_price)}"></div>
       <div class="grid2">
-        <div class="ff"><label>Quota fissa attuale (€/anno)</label><input id="en_fee" type="number" step="any" placeholder="es. 90"></div>
-        <div class="ff"><label>CAP</label><input id="en_cap" placeholder="es. 20121"></div>
+        <div class="ff"><label>Quota fissa attuale (€/anno)</label><input id="en_fee" type="number" step="any" placeholder="es. 90" value="${val(d.current_fixed_fee_year)}"></div>
+        <div class="ff"><label>CAP</label><input id="en_cap" placeholder="es. 20121" value="${val(d.postal_code)}"></div>
       </div>
       <div id="en_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
       <button class="btn" onclick="enAnalyze()">${icon('spark')}Analizza e trova offerte</button>
     </div>
-    <div id="en_results"><div class="empty">Compila i dati e avvia l’analisi per vedere le proposte.</div></div>
+    <div id="en_results"><div class="empty">Carica la bolletta o compila i dati, poi avvia l’analisi.</div></div>
   </div>`;
 }
 async function enAnalyze(){
@@ -2905,8 +2944,8 @@ async function enAnalyze(){
   const box=document.getElementById('en_results');
   try{
     msg.style.color='var(--text-3)';msg.textContent='Analisi in corso…';
-    const d=await rpc('energy_analyze_bill',{p});
-    msg.textContent=''; EN.last=d; box.innerHTML=enRender(d);
+    const dd=await rpc('energy_analyze_bill',{p});
+    msg.textContent=''; EN.last=dd; box.innerHTML=enRender(dd);
   }catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+(e&&e.message?e.message:e);toast('Errore durante l’analisi');}
 }
 function enRender(d){
