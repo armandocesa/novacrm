@@ -2863,9 +2863,12 @@ function modLoadVoice(){
 }
 
 /* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
-const EN={commodity:'ele', last:null, draft:null};
+const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[]};
+const EN_ST={draft:['#9097a3','Bozza'],ready:['#4f46e5','Pronta'],sent:['#d97706','Inviata'],accepted:['#0d9488','Accettata'],switching:['#d97706','Switch in corso'],active:['#15a34a','Attiva'],rejected:['#dc2626','Rifiutata'],cancelled:['#9097a3','Annullata']};
+const EN_ST_KEYS=['draft','ready','sent','accepted','switching','active','rejected','cancelled'];
 function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
 function enSetComm(x){EN.commodity=x;render('mod_energia');}
+function enSetView(v){EN.view=v;render('mod_energia');}
 function enFileToB64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>{const s=String(r.result);res(s.slice(s.indexOf(',')+1));};r.onerror=rej;r.readAsDataURL(file);});}
 async function enExtract(file){
   if(!file)return;
@@ -2879,7 +2882,8 @@ async function enExtract(file){
       period_start:res.period_start||null, period_end:res.period_end||null,
       consumption_total:(res.consumption_total??null), current_unit_price:(res.current_unit_price??null),
       current_fixed_fee_year:(res.current_fixed_fee_year??null), postal_code:res.postal_code||null,
-      supplier:res.supplier||null, customer_name:res.customer_name||null, address:res.address||null, pod:res.pod||null, pdr:res.pdr||null, fiscal_code:res.fiscal_code||null
+      supplier:res.supplier||null, customer_name:res.customer_name||null, address:res.address||null,
+      pod:res.pod||null, pdr:res.pdr||null, fiscal_code:res.fiscal_code||null
     };
     if(res.commodity==='ele'||res.commodity==='gas')EN.commodity=res.commodity;
     render('mod_energia');
@@ -2896,11 +2900,18 @@ async function enExtract(file){
 }
 function vEnergia(){
   if(mode!=='auth'){
-    return note('<b>Energia — disponibile dopo l’accesso.</b> Accedi al tuo workspace per analizzare le bollette di luce e gas e generare proposte di risparmio. In modalità demo questa funzione non è attiva.');
+    return note('<b>Energia — disponibile dopo l’accesso.</b> Accedi al tuo workspace per analizzare le bollette di luce e gas, generare proposte e gestire le pratiche di attivazione. In modalità demo questa funzione non è attiva.');
+  }
+  const tabsTop=`<div class="tabs" style="margin-bottom:14px">
+    <div class="tab ${EN.view==='analisi'?'active':''}" onclick="enSetView('analisi')">Analisi bolletta</div>
+    <div class="tab ${EN.view==='pratiche'?'active':''}" onclick="enSetView('pratiche')">Pratiche</div></div>`;
+  if(EN.view==='pratiche'){
+    return tabsTop+note('<b>Pratiche di attivazione.</b> Raccogli IBAN, consenso e firma e segui lo stato fino allo switch. Pronte per l’invio al fornitore quando collegherai l’API partner.')+
+      `<div id="en_acts"><div class="empty">Caricamento…</div></div>`;
   }
   const c=EN.commodity, unit=c==='ele'?'kWh':'Smc', d=EN.draft||{};
   const val=(x)=>(x===null||x===undefined)?'':x;
-  return note('<b>Analisi bolletta luce e gas.</b> Carica una foto o il PDF: leggiamo i dati in automatico, calcoliamo l’offerta più conveniente e <b>inseriamo subito lead e trattativa nel CRM</b> con anagrafica e dettagli.')+
+  return tabsTop+note('<b>Analisi bolletta luce e gas.</b> Carica una foto o il PDF: leggiamo i dati in automatico, calcoliamo l’offerta più conveniente e <b>inseriamo subito lead e trattativa nel CRM</b> con anagrafica e dettagli.')+
   `<div class="grid2" style="align-items:start">
     <div class="card">
       <h3>Dati bolletta</h3>
@@ -2950,7 +2961,8 @@ async function enAnalyze(){
   const p={commodity:EN.commodity, consumption_total:cons, current_unit_price:price,
     current_fixed_fee_year:parseFloat(gv('en_fee'))||0,
     period_start:gv('en_ps')||null, period_end:gv('en_pe')||null, postal_code:gv('en_cap')||null,
-    current_supplier:gv('en_supplier')||null, address:d.address||null, fiscal_code:gv('en_cf')||null, pod:(EN.commodity==='ele'?(gv('en_pod')||null):null), pdr:(EN.commodity==='gas'?(gv('en_pod')||null):null),
+    current_supplier:gv('en_supplier')||null, address:d.address||null, fiscal_code:gv('en_cf')||null,
+    pod:(EN.commodity==='ele'?(gv('en_pod')||null):null), pdr:(EN.commodity==='gas'?(gv('en_pod')||null):null),
     customer_name:gv('en_name')||null, email:gv('en_email')||null, phone:gv('en_phone')||null};
   const box=document.getElementById('en_results');
   try{
@@ -2984,13 +2996,64 @@ function enRender(d){
     ${crmNote}
     <div class="tablecard" style="margin-top:12px"><table>
       <thead><tr><th>#</th><th>Offerta</th><th style="text-align:right">Attuale</th><th style="text-align:right">Nuova</th><th style="text-align:right">Risparmio</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
+      <tbody>${rows}</tbody></table></div>
+    <div class="card" style="margin-top:12px">
+      <h3>Avvia pratica di attivazione</h3>
+      <div style="font-size:12.5px;color:var(--text-3);margin-bottom:10px">Raccogli i dati per il passaggio a ${esc(best.supplier_name)}. La pratica resta nel CRM, pronta per l’invio al fornitore.</div>
+      <div class="ff"><label>IBAN (per domiciliazione)</label><input id="en_iban" placeholder="IT60 X054 2811 1010 0000 0123 456"></div>
+      <div class="ff"><label>Firma / nome di chi autorizza</label><input id="en_sign" placeholder="Nome e cognome"></div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--text-2);margin:4px 0 12px">
+        <input type="checkbox" id="en_consent" style="margin-top:2px">
+        <span>Il cliente acconsente all’attivazione della nuova offerta e al trattamento dei dati per la pratica di switch.</span></label>
+      <div id="en_act_msg" style="font-size:12.5px;color:var(--text-3);margin-bottom:10px"></div>
+      <button class="btn" onclick="enSaveActivation()">${icon('check')}Crea pratica</button>
+    </div>`;
+}
+async function enSaveActivation(){
+  const m=document.getElementById('en_act_msg');
+  if(!EN.last||!EN.last.bill_id){m.style.color='var(--red)';m.textContent='Esegui prima l’analisi.';return;}
+  const args={bill_id:EN.last.bill_id, iban:gv('en_iban')||null,
+    consent:document.getElementById('en_consent').checked, signature_name:gv('en_sign')||null, status:'ready'};
+  try{
+    m.style.color='var(--text-3)';m.textContent='Creazione pratica…';
+    await rpc('energy_activation_upsert',{p:args});
+    toast('Pratica creata');
+    enSetView('pratiche');
+  }catch(e){m.style.color='var(--red)';m.textContent='Errore: '+(e&&e.message?e.message:e);}
+}
+async function enLoadActs(){
+  const el=document.getElementById('en_acts');if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  try{const data=await rpc('energy_activations_list',{});EN.acts=Array.isArray(data)?data:[];el.innerHTML=enActsRows(EN.acts);}
+  catch(e){el.innerHTML='<div class="empty">Impossibile caricare le pratiche.</div>';}
+}
+function enBadge(st){const s=EN_ST[st]||EN_ST.draft;return `<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${s[0]}">${s[1]}</span>`;}
+function enActsRows(items){
+  if(!items.length)return '<div class="empty">Nessuna pratica. Crea una pratica dalla scheda “Analisi bolletta”.</div>';
+  const rows=items.map(it=>{
+    const sel=`<select onchange="enSetActStatus('${esc(String(it.id))}',this.value)" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">`+
+      EN_ST_KEYS.map(k=>`<option value="${k}" ${k===it.status?'selected':''}>${EN_ST[k][1]}</option>`).join('')+`</select>`;
+    return `<tr>
+      <td><b>${esc(it.customer_name||'—')}</b></td>
+      <td>${it.commodity==='gas'?'🔥 Gas':'⚡ Luce'} · ${esc(it.supplier_name||'—')}<div style="color:var(--text-3);font-size:12px">${esc(it.offer_name||'')}</div></td>
+      <td style="color:var(--green);font-weight:600">${enEur(it.annual_saving)}/anno</td>
+      <td style="font-size:12px;color:var(--text-3)">${it.iban?'IBAN ✓':'IBAN —'} · ${it.consent?'consenso ✓':'consenso —'} · ${it.signature_name?'firma ✓':'firma —'}</td>
+      <td>${enBadge(it.status)}</td>
+      <td style="text-align:right">${sel}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="tablecard"><table><thead><tr><th>Cliente</th><th>Fornitura / offerta</th><th>Risparmio</th><th>Dati pratica</th><th>Stato</th><th style="text-align:right">Cambia stato</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+async function enSetActStatus(id,status){
+  try{await rpc('energy_activation_upsert',{p:{id,status}});toast('Stato aggiornato');enLoadActs();}
+  catch(e){toast('Errore: '+(e&&e.message?e.message:e));enLoadActs();}
 }
 /* ===================== FINE MODULO ENERGIA ===================== */
 
 
 /* Mappa loader post-render dei moduli CRM. */
 const MODLOADERS={
+  mod_energia:function(){try{if(typeof EN!=='undefined'&&EN.view==='pratiche')enLoadActs();}catch(e){}},
   mod_calendar:modLoadCalendar,
   mod_email:modLoadEmail,
   mod_voice:modLoadVoice,
