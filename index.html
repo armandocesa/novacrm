@@ -2879,7 +2879,7 @@ async function enExtract(file){
       period_start:res.period_start||null, period_end:res.period_end||null,
       consumption_total:(res.consumption_total??null), current_unit_price:(res.current_unit_price??null),
       current_fixed_fee_year:(res.current_fixed_fee_year??null), postal_code:res.postal_code||null,
-      supplier:res.supplier||null
+      supplier:res.supplier||null, customer_name:res.customer_name||null, address:res.address||null, pod:res.pod||null, pdr:res.pdr||null, fiscal_code:res.fiscal_code||null
     };
     if(res.commodity==='ele'||res.commodity==='gas')EN.commodity=res.commodity;
     render('mod_energia');
@@ -2900,7 +2900,7 @@ function vEnergia(){
   }
   const c=EN.commodity, unit=c==='ele'?'kWh':'Smc', d=EN.draft||{};
   const val=(x)=>(x===null||x===undefined)?'':x;
-  return note('<b>Analisi bolletta luce e gas.</b> Carica una foto o il PDF della bolletta: leggiamo i dati in automatico, calcoliamo il risparmio confrontando la sola spesa “materia energia” con il catalogo offerte e generiamo una proposta. Puoi trasformarla in lead con un clic.')+
+  return note('<b>Analisi bolletta luce e gas.</b> Carica una foto o il PDF: leggiamo i dati in automatico, calcoliamo l’offerta più conveniente e <b>inseriamo subito lead e trattativa nel CRM</b> con anagrafica e dettagli.')+
   `<div class="grid2" style="align-items:start">
     <div class="card">
       <h3>Dati bolletta</h3>
@@ -2928,8 +2928,16 @@ function vEnergia(){
         <div class="ff"><label>Quota fissa attuale (€/anno)</label><input id="en_fee" type="number" step="any" placeholder="es. 90" value="${val(d.current_fixed_fee_year)}"></div>
         <div class="ff"><label>CAP</label><input id="en_cap" placeholder="es. 20121" value="${val(d.postal_code)}"></div>
       </div>
+      <div class="ff"><label>Fornitore attuale</label><input id="en_supplier" placeholder="es. Enel Energia" value="${val(d.supplier)}"></div>
+      <div style="font-weight:600;font-size:12.5px;color:var(--text-2);margin:6px 0 2px">Anagrafica cliente (va nel CRM)</div>
+      <div class="ff"><label>Intestatario</label><input id="en_name" placeholder="Nome e cognome" value="${val(d.customer_name)}"></div>
+      <div class="grid2"><div class="ff"><label>Codice fiscale / P.IVA</label><input id="en_cf" placeholder="CF o P.IVA" value="${val(d.fiscal_code)}"></div><div class="ff"><label>${c==='gas'?'PDR':'POD'}</label><input id="en_pod" placeholder="${c==='gas'?'PDR':'POD'}" value="${c==='gas'?val(d.pdr):val(d.pod)}"></div></div>
+      <div class="grid2">
+        <div class="ff"><label>Email</label><input id="en_email" placeholder="email@esempio.it"></div>
+        <div class="ff"><label>Telefono</label><input id="en_phone" placeholder="+39 ..."></div>
+      </div>
       <div id="en_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
-      <button class="btn" onclick="enAnalyze()">${icon('spark')}Analizza e trova offerte</button>
+      <button class="btn" onclick="enAnalyze()">${icon('spark')}Analizza e salva nel CRM</button>
     </div>
     <div id="en_results"><div class="empty">Carica la bolletta o compila i dati, poi avvia l’analisi.</div></div>
   </div>`;
@@ -2938,20 +2946,25 @@ async function enAnalyze(){
   const msg=document.getElementById('en_msg');
   const cons=parseFloat(gv('en_cons')), price=parseFloat(gv('en_price'));
   if(!cons||!price){msg.style.color='var(--red)';msg.textContent='Consumo e prezzo unitario attuale sono obbligatori.';return;}
+  const d=EN.draft||{};
   const p={commodity:EN.commodity, consumption_total:cons, current_unit_price:price,
     current_fixed_fee_year:parseFloat(gv('en_fee'))||0,
-    period_start:gv('en_ps')||null, period_end:gv('en_pe')||null, postal_code:gv('en_cap')||null};
+    period_start:gv('en_ps')||null, period_end:gv('en_pe')||null, postal_code:gv('en_cap')||null,
+    current_supplier:gv('en_supplier')||null, address:d.address||null, fiscal_code:gv('en_cf')||null, pod:(EN.commodity==='ele'?(gv('en_pod')||null):null), pdr:(EN.commodity==='gas'?(gv('en_pod')||null):null),
+    customer_name:gv('en_name')||null, email:gv('en_email')||null, phone:gv('en_phone')||null};
   const box=document.getElementById('en_results');
   try{
-    msg.style.color='var(--text-3)';msg.textContent='Analisi in corso…';
-    const dd=await rpc('energy_analyze_bill',{p});
+    msg.style.color='var(--text-3)';msg.textContent='Analisi e salvataggio nel CRM in corso…';
+    const dd=await rpc('energy_analyze_and_crm',{p});
     msg.textContent=''; EN.last=dd; box.innerHTML=enRender(dd);
+    toast('Lead e trattativa creati nel CRM');
   }catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+(e&&e.message?e.message:e);toast('Errore durante l’analisi');}
 }
 function enRender(d){
   const ps=(d&&d.proposals)||[], unit=EN.commodity==='ele'?'kWh':'Smc';
+  const crmNote=`<div class="card" style="margin-top:12px;border-left:3px solid var(--green)"><b style="color:var(--green)">✓ Inserito nel CRM</b> — contatto «${esc(d.customer_name||'Lead')}» e trattativa creati automaticamente. Li trovi in <b>Contatti</b> e <b>Trattative</b>.</div>`;
   if(!ps.length||ps[0].annual_saving<=0){
-    return note('<b>Sei già su una buona offerta 👍</b> Nessuna proposta migliorativa trovata. Consumo annuo stimato: '+((d&&d.annual_consumption)||'—')+' '+unit+'.');
+    return note('<b>Sei già su una buona offerta 👍</b> Nessuna proposta migliorativa trovata. Consumo annuo stimato: '+((d&&d.annual_consumption)||'—')+' '+unit+'.')+crmNote;
   }
   const best=ps[0];
   const rows=ps.map(p=>`<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
@@ -2963,35 +2976,15 @@ function enRender(d){
     <td style="text-align:right;color:var(--green);font-weight:700">−${enEur(p.annual_saving)}</td>
   </tr>`).join('');
   return `<div class="card" style="background:linear-gradient(135deg,var(--green),#0c7a37);color:#fff;border:none">
-      <div style="font-size:13px;opacity:.92">Risparmio annuo stimato — miglior offerta</div>
-      <div style="font-size:34px;font-weight:800;line-height:1.15">${enEur(best.annual_saving)}</div>
-      <div style="font-size:13px;opacity:.92">${esc(best.supplier_name)} · ${esc(best.offer_name)} — consumo annuo ${d.annual_consumption} ${unit}</div>
+      <div style="font-size:13px;opacity:.92">✅ Offerta consigliata — ti conviene</div>
+      <div style="font-size:22px;font-weight:800;line-height:1.2;margin:2px 0">${esc(best.supplier_name)} · ${esc(best.offer_name)}</div>
+      <div style="font-size:13px;opacity:.95">Paghi <b>${enEur(best.annual_cost_offer)}/anno</b> invece di ${enEur(best.annual_cost_current)} → risparmi <b>${enEur(best.annual_saving)}/anno</b></div>
+      <div style="font-size:12px;opacity:.85;margin-top:4px">Consumo annuo ${d.annual_consumption} ${unit}</div>
     </div>
+    ${crmNote}
     <div class="tablecard" style="margin-top:12px"><table>
       <thead><tr><th>#</th><th>Offerta</th><th style="text-align:right">Attuale</th><th style="text-align:right">Nuova</th><th style="text-align:right">Risparmio</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>
-    <div class="card" style="margin-top:12px">
-      <h3>Crea lead nel CRM</h3>
-      <div class="grid2">
-        <div class="ff"><label>Nome e cognome *</label><input id="en_name" placeholder="es. Mario Rossi"></div>
-        <div class="ff"><label>Email</label><input id="en_email" placeholder="email@esempio.it"></div>
-      </div>
-      <div class="ff"><label>Telefono</label><input id="en_phone" placeholder="+39 ..."></div>
-      <div id="en_lead_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
-      <button class="btn" onclick="enPromote()">${icon('plus')}Crea Lead + Trattativa</button>
-    </div>`;
-}
-async function enPromote(){
-  const m=document.getElementById('en_lead_msg');
-  const name=gv('en_name');
-  if(!name){m.style.color='var(--red)';m.textContent='Il nome è obbligatorio.';return;}
-  if(!EN.last||!EN.last.bill_id){m.style.color='var(--red)';m.textContent='Esegui prima l’analisi.';return;}
-  try{
-    m.style.color='var(--text-3)';m.textContent='Creazione…';
-    const r=await rpc('energy_promote_lead',{p_bill_id:EN.last.bill_id,p_name:name,p_email:gv('en_email')||null,p_phone:gv('en_phone')||null});
-    m.style.color='var(--green)';m.textContent='Lead creato (risparmio '+enEur(r&&r.annual_saving)+'/anno). Lo trovi in Contatti e Trattative.';
-    toast('Lead creato nel CRM');
-  }catch(e){m.style.color='var(--red)';m.textContent='Errore: '+(e&&e.message?e.message:e);}
+      <tbody>${rows}</tbody></table></div>`;
 }
 /* ===================== FINE MODULO ENERGIA ===================== */
 
