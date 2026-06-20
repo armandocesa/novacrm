@@ -2904,7 +2904,9 @@ function vEnergia(){
   }
   const tabsTop=`<div class="tabs" style="margin-bottom:14px">
     <div class="tab ${EN.view==='analisi'?'active':''}" onclick="enSetView('analisi')">Analisi bolletta</div>
+    <div class="tab ${EN.view==='confronto'?'active':''}" onclick="enSetView('confronto')">Confronto</div>
     <div class="tab ${EN.view==='pratiche'?'active':''}" onclick="enSetView('pratiche')">Pratiche</div></div>`;
+  if(EN.view==='confronto'){ return tabsTop+enConfronto(); }
   if(EN.view==='pratiche'){
     return tabsTop+note('<b>Pratiche di attivazione.</b> Raccogli IBAN, consenso e firma e segui lo stato fino allo switch. Pronte per l’invio al fornitore quando collegherai l’API partner.')+
       `<div id="en_acts"><div class="empty">Caricamento…</div></div>`;
@@ -3047,6 +3049,29 @@ function enActsRows(items){
 async function enSetActStatus(id,status){
   try{await rpc('energy_activation_upsert',{p:{id,status}});toast('Stato aggiornato');enLoadActs();}
   catch(e){toast('Errore: '+(e&&e.message?e.message:e));enLoadActs();}
+}
+function enConfronto(){
+  const d=EN.last;
+  if(!d||!d.proposals||!d.proposals.length){
+    return note('<b>Confronto costi fornitori.</b> Esegui prima un’analisi nella scheda “Analisi bolletta”: qui comparirà il confronto completo tra tutti i fornitori, con grafico.');
+  }
+  const unit=EN.commodity==='gas'?'Smc':'kWh';
+  const cur=d.proposals[0].annual_cost_current;
+  const best=d.proposals[0];
+  const maxv=Math.max(cur, ...d.proposals.map(p=>p.annual_cost_offer))||1;
+  const bar=(cost,color)=>`<div style="background:var(--surface-3);border-radius:6px;height:20px;width:100%"><div style="width:${Math.max(3,Math.round(cost/maxv*100))}%;height:100%;background:${color};border-radius:6px"></div></div>`;
+  let rows=`<tr><td style="white-space:nowrap"><b>Attuale</b><div style="color:var(--text-3);font-size:12px">${esc(d.current_supplier||'Fornitore attuale')}</div></td><td style="width:45%">${bar(cur,'var(--red)')}</td><td style="text-align:right;font-weight:700">${enEur(cur)}/anno</td><td></td></tr>`;
+  rows+=d.proposals.map(p=>{
+    const col=p.is_recommended?'var(--green)':'var(--primary)';
+    return `<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
+      <td style="white-space:nowrap"><b>${esc(p.supplier_name)}</b> ${p.is_recommended?'<span class="pill cli" style="font-size:11px">Consigliata</span>':''}<div style="color:var(--text-3);font-size:12px">${esc(p.offer_name)} · ${p.price_type==='fixed'?'fisso':'indicizzata'}</div></td>
+      <td>${bar(p.annual_cost_offer,col)}</td>
+      <td style="text-align:right;font-weight:600">${enEur(p.annual_cost_offer)}/anno</td>
+      <td style="text-align:right;color:var(--green);font-weight:700">−${enEur(p.annual_saving)}</td>
+    </tr>`;
+  }).join('');
+  return note(`<b>Confronto costi fornitori.</b> Consumo annuo stimato <b>${d.annual_consumption} ${unit}</b>. Spesa attuale <b>${enEur(cur)}/anno</b>. Migliore: <b>${esc(best.supplier_name)}</b> a ${enEur(best.annual_cost_offer)}/anno (risparmio ${enEur(best.annual_saving)}).`)+
+  `<div class="tablecard"><table><thead><tr><th>Fornitore</th><th>Costo annuo (sola energia)</th><th style="text-align:right">€/anno</th><th style="text-align:right">Risparmio</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 /* ===================== FINE MODULO ENERGIA ===================== */
 
