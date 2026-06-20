@@ -656,7 +656,7 @@ const DATA={
 };
 
 const TITLES={dashboard:'Dashboard',contatti:'Contatti',aziende:'Aziende',trattative:'Trattative',attivita:'Attività',calendario:'Calendario',email:'Email',messaggi:'SMS / WhatsApp',chiamate:'Chiamate',social:'Social',webform:'Web Form',campagne:'Campagne email',sequenze:'Sequenze',workflow:'Workflow',blueprint:'Blueprint',ticket:'Ticket',knowledge:'Knowledge Base',centro:'Centro Assistenza',report:'Report',moduli:'Moduli personalizzati',ruoli:'Ruoli e permessi',audit:'Audit log',marketplace:'Marketplace & API',mobile:'App mobile',organizzazione:'Organizzazione',pagine:'Pagine',superadmin:'Superadmin'};
-const SUBS={dashboard:'Panoramica delle vendite e delle attività',contatti:'Tutte le persone con cui sei in contatto',aziende:'Le organizzazioni nel tuo portfolio',trattative:'Pipeline di vendita per stadio',attivita:'Compiti e promemoria',calendario:'Agenda e prenotazioni',email:'Casella collegata con riepilogo AI',messaggi:'Messaggistica diretta coi contatti',chiamate:'Registro chiamate e telefonia',social:'Interazioni social dei contatti',webform:'Moduli per acquisire lead dal sito',campagne:'Email marketing e tracciamento',sequenze:'Cadenze email automatiche',workflow:'Automazioni basate su eventi',blueprint:'Processi di vendita guidati',ticket:'Help desk e gestione richieste',knowledge:'Articoli di auto-aiuto per i clienti',centro:'Portale clienti e widget di supporto',report:'Analisi, performance e previsioni',moduli:'Personalizza moduli e campi',ruoli:'Permessi e controllo accessi',audit:'Registro delle azioni sensibili',marketplace:'Integrazioni e API',mobile:'App native iOS e Android',organizzazione:'Analisi per area di business e marketing',pagine:'Spazio di lavoro in stile Notion',superadmin:'Gestione organizzazioni, utenti e ruoli',mod_segretario:'Scadenze e promemoria automatici',mod_signature:'Richieste di firma digitale'};
+const SUBS={dashboard:'Panoramica delle vendite e delle attività',contatti:'Tutte le persone con cui sei in contatto',aziende:'Le organizzazioni nel tuo portfolio',trattative:'Pipeline di vendita per stadio',attivita:'Compiti e promemoria',calendario:'Agenda e prenotazioni',email:'Casella collegata con riepilogo AI',messaggi:'Messaggistica diretta coi contatti',chiamate:'Registro chiamate e telefonia',social:'Interazioni social dei contatti',webform:'Moduli per acquisire lead dal sito',campagne:'Email marketing e tracciamento',sequenze:'Cadenze email automatiche',workflow:'Automazioni basate su eventi',blueprint:'Processi di vendita guidati',ticket:'Help desk e gestione richieste',knowledge:'Articoli di auto-aiuto per i clienti',centro:'Portale clienti e widget di supporto',report:'Analisi, performance e previsioni',moduli:'Personalizza moduli e campi',ruoli:'Permessi e controllo accessi',audit:'Registro delle azioni sensibili',marketplace:'Integrazioni e API',mobile:'App native iOS e Android',organizzazione:'Analisi per area di business e marketing',pagine:'Spazio di lavoro in stile Notion',superadmin:'Gestione organizzazioni, utenti e ruoli',mod_segretario:'Scadenze e promemoria automatici',mod_signature:'Richieste di firma digitale',mod_energia:'Analisi bolletta luce e gas e proposte di risparmio'};
 
 let mailSel=0, chatSel=0, pipeSel=0, current='dashboard';
 /* Moduli abilitati per il tenant dell'utente loggato (null = non ancora caricati / non applicabile in demo) */
@@ -718,7 +718,7 @@ function render(view){
   c.classList.remove('view');void c.offsetWidth;c.classList.add('view');
   if(orgIdx!==0){c.innerHTML=tenantEmpty();return;}
   const VIEWS={dashboard:vDashboard,contatti:vContatti,aziende:vAziende,trattative:vTrattative,attivita:vAttivita,calendario:vCalendario,email:vEmail,messaggi:vMessaggi,chiamate:vChiamate,social:vSocial,webform:vWebform,campagne:vCampagne,sequenze:vSequenze,workflow:vWorkflow,blueprint:vBlueprint,ticket:vTicket,knowledge:vKnowledge,centro:vCentro,report:vReport,moduli:vModuli,ruoli:vRuoli,audit:vAudit,marketplace:vMarketplace,mobile:vMobile,organizzazione:vOrg,pagine:vPagine,superadmin:vSuperadmin,
-    mod_calendar:vModCalendar,mod_email:vModEmail,mod_signature:vSignature,mod_segretario:vSegretario,mod_wealthview:vModPlaceholder,mod_none:vNoModule,
+    mod_calendar:vModCalendar,mod_email:vModEmail,mod_signature:vSignature,mod_segretario:vSegretario,mod_energia:vEnergia,mod_wealthview:vModPlaceholder,mod_none:vNoModule,
     mod_social:vModSocial,mod_campaigns:vModCampaigns,mod_sequences:vModSequences,mod_workflows:vModWorkflows,mod_desk:vModDesk,mod_webforms:vModWebforms,mod_messaging:vModMessaging,mod_calls:vModCalls,mod_agent:vModAgent,mod_voice:vModVoice};
   const fn=VIEWS[view]||vDashboard;
   c.innerHTML=fn(view);
@@ -2861,6 +2861,101 @@ function modLoadVoice(){
   else voiceLoadNumbers();
 }
 
+/* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
+const EN={commodity:'ele', last:null};
+function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
+function enSetComm(x){EN.commodity=x;render('mod_energia');}
+function vEnergia(){
+  if(mode!=='auth'){
+    return note('<b>Energia — disponibile dopo l’accesso.</b> Accedi al tuo workspace per analizzare le bollette di luce e gas e generare proposte di risparmio. In modalità demo questa funzione non è attiva.');
+  }
+  const c=EN.commodity, unit=c==='ele'?'kWh':'Smc';
+  return note('<b>Analisi bolletta luce e gas.</b> Inserisci i dati della bolletta: calcoliamo il risparmio confrontando la sola spesa “materia energia” con il catalogo offerte aggiornato e generiamo una proposta. Puoi trasformarla in lead con un clic.')+
+  `<div class="grid2" style="align-items:start">
+    <div class="card">
+      <h3>Dati bolletta</h3>
+      <div class="tabs" style="margin:6px 0 14px">
+        <div class="tab ${c==='ele'?'active':''}" onclick="enSetComm('ele')">⚡ Luce</div>
+        <div class="tab ${c==='gas'?'active':''}" onclick="enSetComm('gas')">🔥 Gas</div>
+      </div>
+      <div class="grid2">
+        <div class="ff"><label>Periodo dal</label><input id="en_ps" type="date"></div>
+        <div class="ff"><label>Periodo al</label><input id="en_pe" type="date"></div>
+      </div>
+      <div class="ff"><label>Consumo del periodo (${unit}) *</label><input id="en_cons" type="number" step="any" placeholder="es. 600"></div>
+      <div class="ff"><label>Prezzo materia energia attuale (€/${unit}) *</label><input id="en_price" type="number" step="any" placeholder="es. 0.165"></div>
+      <div class="grid2">
+        <div class="ff"><label>Quota fissa attuale (€/anno)</label><input id="en_fee" type="number" step="any" placeholder="es. 90"></div>
+        <div class="ff"><label>CAP</label><input id="en_cap" placeholder="es. 20121"></div>
+      </div>
+      <div id="en_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="enAnalyze()">${icon('spark')}Analizza e trova offerte</button>
+    </div>
+    <div id="en_results"><div class="empty">Compila i dati e avvia l’analisi per vedere le proposte.</div></div>
+  </div>`;
+}
+async function enAnalyze(){
+  const msg=document.getElementById('en_msg');
+  const cons=parseFloat(gv('en_cons')), price=parseFloat(gv('en_price'));
+  if(!cons||!price){msg.style.color='var(--red)';msg.textContent='Consumo e prezzo unitario attuale sono obbligatori.';return;}
+  const p={commodity:EN.commodity, consumption_total:cons, current_unit_price:price,
+    current_fixed_fee_year:parseFloat(gv('en_fee'))||0,
+    period_start:gv('en_ps')||null, period_end:gv('en_pe')||null, postal_code:gv('en_cap')||null};
+  const box=document.getElementById('en_results');
+  try{
+    msg.style.color='var(--text-3)';msg.textContent='Analisi in corso…';
+    const d=await rpc('energy_analyze_bill',{p});
+    msg.textContent=''; EN.last=d; box.innerHTML=enRender(d);
+  }catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+(e&&e.message?e.message:e);toast('Errore durante l’analisi');}
+}
+function enRender(d){
+  const ps=(d&&d.proposals)||[], unit=EN.commodity==='ele'?'kWh':'Smc';
+  if(!ps.length||ps[0].annual_saving<=0){
+    return note('<b>Sei già su una buona offerta 👍</b> Nessuna proposta migliorativa trovata. Consumo annuo stimato: '+((d&&d.annual_consumption)||'—')+' '+unit+'.');
+  }
+  const best=ps[0];
+  const rows=ps.map(p=>`<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
+    <td>${p.rank}</td>
+    <td><b>${esc(p.supplier_name)}</b> — ${esc(p.offer_name)} ${p.is_recommended?'<span class="pill cli" style="font-size:11px">Consigliata</span>':''} ${p.green?'🌱':''}
+      <div style="color:var(--text-3);font-size:12px">${p.price_type==='fixed'?'Prezzo fisso':('Indicizzata '+esc(p.index_name||'')+' +'+p.spread_eur)}${p.duration_months?(' · '+p.duration_months+' mesi'):''} · quota ${enEur(p.fixed_fee_year)}/anno</div></td>
+    <td style="text-align:right;color:var(--text-3);text-decoration:line-through">${enEur(p.annual_cost_current)}</td>
+    <td style="text-align:right"><b>${enEur(p.annual_cost_offer)}</b></td>
+    <td style="text-align:right;color:var(--green);font-weight:700">−${enEur(p.annual_saving)}</td>
+  </tr>`).join('');
+  return `<div class="card" style="background:linear-gradient(135deg,var(--green),#0c7a37);color:#fff;border:none">
+      <div style="font-size:13px;opacity:.92">Risparmio annuo stimato — miglior offerta</div>
+      <div style="font-size:34px;font-weight:800;line-height:1.15">${enEur(best.annual_saving)}</div>
+      <div style="font-size:13px;opacity:.92">${esc(best.supplier_name)} · ${esc(best.offer_name)} — consumo annuo ${d.annual_consumption} ${unit}</div>
+    </div>
+    <div class="tablecard" style="margin-top:12px"><table>
+      <thead><tr><th>#</th><th>Offerta</th><th style="text-align:right">Attuale</th><th style="text-align:right">Nuova</th><th style="text-align:right">Risparmio</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="card" style="margin-top:12px">
+      <h3>Crea lead nel CRM</h3>
+      <div class="grid2">
+        <div class="ff"><label>Nome e cognome *</label><input id="en_name" placeholder="es. Mario Rossi"></div>
+        <div class="ff"><label>Email</label><input id="en_email" placeholder="email@esempio.it"></div>
+      </div>
+      <div class="ff"><label>Telefono</label><input id="en_phone" placeholder="+39 ..."></div>
+      <div id="en_lead_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
+      <button class="btn" onclick="enPromote()">${icon('plus')}Crea Lead + Trattativa</button>
+    </div>`;
+}
+async function enPromote(){
+  const m=document.getElementById('en_lead_msg');
+  const name=gv('en_name');
+  if(!name){m.style.color='var(--red)';m.textContent='Il nome è obbligatorio.';return;}
+  if(!EN.last||!EN.last.bill_id){m.style.color='var(--red)';m.textContent='Esegui prima l’analisi.';return;}
+  try{
+    m.style.color='var(--text-3)';m.textContent='Creazione…';
+    const r=await rpc('energy_promote_lead',{p_bill_id:EN.last.bill_id,p_name:name,p_email:gv('en_email')||null,p_phone:gv('en_phone')||null});
+    m.style.color='var(--green)';m.textContent='Lead creato (risparmio '+enEur(r&&r.annual_saving)+'/anno). Lo trovi in Contatti e Trattative.';
+    toast('Lead creato nel CRM');
+  }catch(e){m.style.color='var(--red)';m.textContent='Errore: '+(e&&e.message?e.message:e);}
+}
+/* ===================== FINE MODULO ENERGIA ===================== */
+
+
 /* Mappa loader post-render dei moduli CRM. */
 const MODLOADERS={
   mod_calendar:modLoadCalendar,
@@ -2884,6 +2979,7 @@ const MODULES=[
   {key:'email',label:'Email',ic:'mail'},
   {key:'signature',label:'Firma digitale',ic:'check'},
   {key:'segretario',label:'Segretario',ic:'buoy'},
+  {key:'energia',label:'Energia',ic:'zap'},
   {key:'wealthview',label:'WealthView',ic:'chart'},
   {key:'social',label:'Social',ic:'share'},
   {key:'campaigns',label:'Campagne',ic:'send'},
