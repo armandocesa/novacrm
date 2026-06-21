@@ -2863,7 +2863,7 @@ function modLoadVoice(){
 }
 
 /* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
-const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[]};
+const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[], sup:[]};
 const EN_ST={draft:['#9097a3','Bozza'],ready:['#4f46e5','Pronta'],sent:['#d97706','Inviata'],accepted:['#0d9488','Accettata'],switching:['#d97706','Switch in corso'],active:['#15a34a','Attiva'],rejected:['#dc2626','Rifiutata'],cancelled:['#9097a3','Annullata']};
 const EN_ST_KEYS=['draft','ready','sent','accepted','switching','active','rejected','cancelled'];
 function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
@@ -2905,8 +2905,10 @@ function vEnergia(){
   const tabsTop=`<div class="tabs" style="margin-bottom:14px">
     <div class="tab ${EN.view==='analisi'?'active':''}" onclick="enSetView('analisi')">Analisi bolletta</div>
     <div class="tab ${EN.view==='confronto'?'active':''}" onclick="enSetView('confronto')">Confronto</div>
+    <div class="tab ${EN.view==='fornitori'?'active':''}" onclick="enSetView('fornitori')">Fornitori</div>
     <div class="tab ${EN.view==='pratiche'?'active':''}" onclick="enSetView('pratiche')">Pratiche</div></div>`;
   if(EN.view==='confronto'){ return tabsTop+enConfronto(); }
+  if(EN.view==='fornitori'){ return tabsTop+note('<b>Fornitori & accordi.</b> Registro dei provider con caratteristiche e stato della partnership. Cambia lo stato per gestirli come pipeline.')+`<div id="en_sup"><div class="empty">Caricamento…</div></div>`; }
   if(EN.view==='pratiche'){
     return tabsTop+note('<b>Pratiche di attivazione.</b> Raccogli IBAN, consenso e firma e segui lo stato fino allo switch. Pronte per l’invio al fornitore quando collegherai l’API partner.')+
       `<div id="en_acts"><div class="empty">Caricamento…</div></div>`;
@@ -3073,12 +3075,43 @@ function enConfronto(){
   return note(`<b>Confronto costi fornitori.</b> Consumo annuo stimato <b>${d.annual_consumption} ${unit}</b>. Spesa attuale <b>${enEur(cur)}/anno</b>. Migliore: <b>${esc(best.supplier_name)}</b> a ${enEur(best.annual_cost_offer)}/anno (risparmio ${enEur(best.annual_saving)}).`)+
   `<div class="tablecard"><table><thead><tr><th>Fornitore</th><th>Costo annuo (sola energia)</th><th style="text-align:right">€/anno</th><th style="text-align:right">Risparmio</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
+const EN_PS={none:['#9097a3','Da contattare'],target:['#4f46e5','Target'],contacted:['#d97706','Contattato'],negotiating:['#d97706','In trattativa'],active:['#15a34a','Attivo'],rejected:['#dc2626','Scartato']};
+const EN_PS_KEYS=['target','contacted','negotiating','active','rejected','none'];
+function enPsBadge(st){const x=EN_PS[st]||EN_PS.none;return `<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${x[0]}">${x[1]}</span>`;}
+function enTipoBadge(t){const m={incumbent:['Incumbent','var(--primary)'],digital:['Digitale','var(--green)'],locale:['Locale','var(--amber)']};const x=m[t]||['—','var(--text-3)'];return `<span style="font-size:11px;color:${x[1]};font-weight:600">${x[0]}</span>`;}
+async function enLoadFornitori(){
+  const el=document.getElementById('en_sup');if(!el)return;
+  el.innerHTML='<div class="empty">Caricamento…</div>';
+  try{const data=await rpc('energy_suppliers_list',{});EN.sup=Array.isArray(data)?data:[];el.innerHTML=enSupRows(EN.sup);}
+  catch(e){el.innerHTML='<div class="empty">Impossibile caricare i fornitori.</div>';}
+}
+function enSupRows(items){
+  if(!items.length)return '<div class="empty">Nessun fornitore.</div>';
+  const rows=items.map(it=>{
+    const sel=`<select onchange="enSetSupplierStatus('${esc(String(it.id))}',this.value)" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:7px;background:var(--surface)">`+
+      EN_PS_KEYS.map(k=>`<option value="${k}" ${k===it.partner_status?'selected':''}>${EN_PS[k][1]}</option>`).join('')+`</select>`;
+    const flags=[it.dual?'dual':null, it.digital_onboarding?'onboarding digitale':null, (it.offers_count>0?'a catalogo':null)].filter(Boolean).join(' · ');
+    return `<tr>
+      <td style="white-space:nowrap"><b>${esc(it.name)}</b><div style="color:var(--text-3);font-size:12px">${esc(it.gruppo||'')}</div></td>
+      <td>${enTipoBadge(it.tipo)}<div style="color:var(--text-3);font-size:11px">${esc(flags)}</div></td>
+      <td style="font-size:12.5px">${esc(it.characteristics||'')}</td>
+      <td style="font-size:12px;white-space:nowrap">${esc(it.commission_note||'—')}</td>
+      <td>${enPsBadge(it.partner_status)}</td>
+      <td style="text-align:right">${sel}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="tablecard"><table><thead><tr><th>Fornitore</th><th>Tipo</th><th>Caratteristiche</th><th>Provvigione</th><th>Stato</th><th style="text-align:right">Cambia stato</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+async function enSetSupplierStatus(id,status){
+  try{await rpc('energy_supplier_set_status',{p_id:id,p_status:status});toast('Stato aggiornato');enLoadFornitori();}
+  catch(e){toast('Errore: '+(e&&e.message?e.message:e));enLoadFornitori();}
+}
 /* ===================== FINE MODULO ENERGIA ===================== */
 
 
 /* Mappa loader post-render dei moduli CRM. */
 const MODLOADERS={
-  mod_energia:function(){try{if(typeof EN!=='undefined'&&EN.view==='pratiche')enLoadActs();}catch(e){}},
+  mod_energia:function(){try{if(typeof EN!=='undefined'){if(EN.view==='pratiche')enLoadActs();else if(EN.view==='fornitori')enLoadFornitori();}}catch(e){}},
   mod_calendar:modLoadCalendar,
   mod_email:modLoadEmail,
   mod_voice:modLoadVoice,
