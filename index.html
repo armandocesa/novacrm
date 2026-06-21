@@ -3079,6 +3079,7 @@ const EN_PS={none:['#9097a3','Da contattare'],target:['#4f46e5','Target'],contac
 const EN_PS_KEYS=['target','contacted','negotiating','active','rejected','none'];
 function enPsBadge(st){const x=EN_PS[st]||EN_PS.none;return `<span style="display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:${x[0]}">${x[1]}</span>`;}
 function enTipoBadge(t){const m={incumbent:['Incumbent','var(--primary)'],digital:['Digitale','var(--green)'],locale:['Locale','var(--amber)']};const x=m[t]||['—','var(--text-3)'];return `<span style="font-size:11px;color:${x[1]};font-weight:600">${x[0]}</span>`;}
+function enPriceBadge(l){const m={basse:['Tariffe basse','var(--green)'],medie:['Tariffe medie','var(--text-3)'],alte:['Tariffe alte','var(--amber)']};const x=m[l];return x?`<span style="font-size:10.5px;color:${x[1]};font-weight:600">${x[0]}</span>`:'';}
 async function enLoadFornitori(){
   const el=document.getElementById('en_sup');if(!el)return;
   el.innerHTML='<div class="empty">Caricamento…</div>';
@@ -3093,7 +3094,9 @@ function enSupRows(items){
     const flags=[it.dual?'dual':null, it.digital_onboarding?'onboarding digitale':null, (it.offers_count>0?'a catalogo':null)].filter(Boolean).join(' · ');
     return `<tr>
       <td style="white-space:nowrap"><b>${esc(it.name)}</b><div style="color:var(--text-3);font-size:12px">${esc(it.gruppo||'')}</div></td>
-      <td>${enTipoBadge(it.tipo)}<div style="color:var(--text-3);font-size:11px">${esc(flags)}</div></td>
+      <td>${enTipoBadge(it.tipo)}${it.area?(' · <span style="font-size:11px;color:var(--text-3)">'+esc(it.area)+'</span>'):''}
+        <div style="margin-top:3px">${it.no_fixed_fee?'<span style="font-size:10.5px;background:var(--green-soft);color:var(--green);padding:1px 6px;border-radius:20px;font-weight:600">senza quota fissa</span> ':''}${enPriceBadge(it.price_level)}</div>
+        <div style="color:var(--text-3);font-size:11px;margin-top:2px">${esc(flags)}</div></td>
       <td style="font-size:12.5px">${esc(it.characteristics||'')}</td>
       <td style="font-size:12px;white-space:nowrap">${esc(it.commission_note||'—')}</td>
       <td>${enPsBadge(it.partner_status)}</td>
