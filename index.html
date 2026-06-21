@@ -3099,7 +3099,7 @@ function enSupRows(items){
         <div style="color:var(--text-3);font-size:11px;margin-top:2px">${esc(flags)}</div></td>
       <td style="font-size:12.5px">${esc(it.characteristics||'')}</td>
       <td style="font-size:12px;white-space:nowrap">${esc(it.commission_note||'—')}</td>
-      <td style="font-size:11.5px;white-space:nowrap">${it.phone?esc(it.phone):'<span style="color:var(--text-3)">tel —</span>'}<br>${it.email?esc(it.email):'<span style="color:var(--text-3)">email —</span>'}<br><button class="btn ghost sm" style="font-size:11px;padding:2px 8px;margin-top:3px" onclick="enEditContact(\'${esc(String(it.id))}\')">Modifica</button></td>
+      <td style="font-size:11.5px;white-space:nowrap">${it.phone?esc(it.phone):'<span style="color:var(--text-3)">tel —</span>'}<br>${it.email?esc(it.email):'<span style="color:var(--text-3)">email —</span>'}<br>${it.website?('<a href="'+esc(it.website)+'" target="_blank" rel="noopener" style="color:var(--primary)">sito \u2197</a>'):'<span style="color:var(--text-3)">sito —</span>'}<br><button class="btn ghost sm" style="font-size:11px;padding:2px 8px;margin-top:3px" onclick="enEditContact(\'${esc(String(it.id))}\')">Modifica</button></td>
       <td>${enPsBadge(it.partner_status)}</td>
       <td style="text-align:right">${sel}</td>
     </tr>`;
@@ -3112,7 +3112,9 @@ async function enEditContact(id){
   if(ph===null)return;
   const em=prompt('Email del fornitore:', s.email||'');
   if(em===null)return;
-  try{await rpc('energy_supplier_set_contact',{p_id:id,p_phone:ph,p_email:em});toast('Contatti salvati');enLoadFornitori();}
+  const ws=prompt('Sito web del fornitore:', s.website||'');
+  if(ws===null)return;
+  try{await rpc('energy_supplier_set_contact',{p_id:id,p_phone:ph,p_email:em,p_website:ws});toast('Contatti salvati');enLoadFornitori();}
   catch(e){toast('Errore: '+(e&&e.message?e.message:e));}
 }
 async function enSetSupplierStatus(id,status){
