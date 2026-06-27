@@ -2863,7 +2863,7 @@ function modLoadVoice(){
 }
 
 /* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
-const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[], sup:[]};
+const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[], sup:[], filePath:null};
 const EN_ST={draft:['#9097a3','Bozza'],ready:['#4f46e5','Pronta'],sent:['#d97706','Inviata'],accepted:['#0d9488','Accettata'],switching:['#d97706','Switch in corso'],active:['#15a34a','Attiva'],rejected:['#dc2626','Rifiutata'],cancelled:['#9097a3','Annullata']};
 const EN_ST_KEYS=['draft','ready','sent','accepted','switching','active','rejected','cancelled'];
 function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
@@ -2876,6 +2876,7 @@ async function enExtract(file){
   if(file.size>20*1024*1024){if(msg){msg.style.color='var(--red)';msg.textContent='File troppo grande (max ~20 MB).';}return;}
   if(msg){msg.style.color='var(--text-3)';msg.textContent='Lettura della bolletta in corso… (può richiedere qualche secondo)';}
   try{
+    EN.filePath=await enUploadBill(file);
     const data=await enFileToB64(file);
     const res=await edgeFn('bill-extract',{mime:file.type||'application/octet-stream',data,filename:file.name});
     EN.draft={
@@ -2951,6 +2952,7 @@ function vEnergia(){
         <div class="ff"><label>Email</label><input id="en_email" placeholder="email@esempio.it"></div>
         <div class="ff"><label>Telefono</label><input id="en_phone" placeholder="+39 ..."></div>
       </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-2);margin:4px 0 10px"><input type="checkbox" id="en_consent_a" style="margin-top:2px"><span>Il cliente acconsente al trattamento dei dati per l\u2019analisi e la proposta (GDPR). Diritto di recesso 14 giorni sul nuovo contratto.</span></label>
       <div id="en_msg" style="font-size:12.5px;color:var(--text-3);margin:6px 0 12px"></div>
       <button class="btn" onclick="enAnalyze()">${icon('spark')}Analizza e salva nel CRM</button>
     </div>
@@ -2967,7 +2969,8 @@ async function enAnalyze(){
     period_start:gv('en_ps')||null, period_end:gv('en_pe')||null, postal_code:gv('en_cap')||null,
     current_supplier:gv('en_supplier')||null, address:d.address||null, fiscal_code:gv('en_cf')||null,
     pod:(EN.commodity==='ele'?(gv('en_pod')||null):null), pdr:(EN.commodity==='gas'?(gv('en_pod')||null):null),
-    customer_name:gv('en_name')||null, email:gv('en_email')||null, phone:gv('en_phone')||null};
+    customer_name:gv('en_name')||null, email:gv('en_email')||null, phone:gv('en_phone')||null,
+    file_path:EN.filePath||null, consent:(document.getElementById('en_consent_a')?document.getElementById('en_consent_a').checked:false)};
   const box=document.getElementById('en_results');
   try{
     msg.style.color='var(--text-3)';msg.textContent='Analisi e salvataggio nel CRM in corso…';
@@ -3001,6 +3004,7 @@ function enRender(d){
     <div class="tablecard" style="margin-top:12px"><table>
       <thead><tr><th>#</th><th>Offerta</th><th style="text-align:right">Attuale</th><th style="text-align:right">Nuova</th><th style="text-align:right">Risparmio</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
+    <div style="margin-top:10px"><button class="btn ghost" onclick="enPrintProposal()">Salva proposta (PDF)</button></div>
     <div class="card" style="margin-top:12px">
       <h3>Avvia pratica di attivazione</h3>
       <div style="font-size:12.5px;color:var(--text-3);margin-bottom:10px">Raccogli i dati per il passaggio a ${esc(best.supplier_name)}. La pratica resta nel CRM, pronta per l’invio al fornitore.</div>
@@ -3043,7 +3047,7 @@ function enActsRows(items){
       <td style="color:var(--green);font-weight:600">${enEur(it.annual_saving)}/anno</td>
       <td style="font-size:12px;color:var(--text-3)">${it.iban?'IBAN ✓':'IBAN —'} · ${it.consent?'consenso ✓':'consenso —'} · ${it.signature_name?'firma ✓':'firma —'}</td>
       <td>${enBadge(it.status)}</td>
-      <td style="text-align:right">${sel}</td>
+      <td style="text-align:right;white-space:nowrap"><button class="btn ghost sm" style="font-size:11px;padding:3px 8px;margin-right:4px" onclick="enSendToProvider(\'${esc(String(it.id))}\',\'${esc(it.supplier_website||'')}\')">Invia</button>${sel}</td>
     </tr>`;
   }).join('');
   return `<div class="tablecard"><table><thead><tr><th>Cliente</th><th>Fornitura / offerta</th><th>Risparmio</th><th>Dati pratica</th><th>Stato</th><th style="text-align:right">Cambia stato</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -3120,6 +3124,25 @@ async function enEditContact(id){
 async function enSetSupplierStatus(id,status){
   try{await rpc('energy_supplier_set_status',{p_id:id,p_status:status});toast('Stato aggiornato');enLoadFornitori();}
   catch(e){toast('Errore: '+(e&&e.message?e.message:e));enLoadFornitori();}
+}
+async function enUploadBill(file){
+  try{
+    const path=((crypto&&crypto.randomUUID)?crypto.randomUUID():(''+Date.now()))+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const r=await fetch(SUPA.url+'/storage/v1/object/energy-bills/'+encodeURIComponent(path),{method:'POST',headers:{apikey:SUPA.key,Authorization:'Bearer '+token,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});
+    return r.ok?path:null;
+  }catch(e){return null;}
+}
+async function enSendToProvider(id,website){
+  if(website)window.open(website,'_blank');
+  try{await rpc('energy_activation_submit',{p_id:id});toast('Pratica inviata');enLoadActs();}
+  catch(e){toast('Errore: '+(e&&e.message?e.message:e));enLoadActs();}
+}
+function enPrintProposal(){
+  const d=EN.last; if(!d||!d.proposals||!d.proposals.length)return;
+  const unit=EN.commodity==='gas'?'Smc':'kWh'; const best=d.proposals[0];
+  const rows=d.proposals.map(p=>`<tr><td>${p.rank}</td><td>${esc(p.supplier_name)} — ${esc(p.offer_name)}</td><td style="text-align:right">${enEur(p.annual_cost_offer)}</td><td style="text-align:right">−${enEur(p.annual_saving)}</td></tr>`).join('');
+  const html=`<html><head><meta charset="utf-8"><title>Proposta risparmio energia</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{color:#15a34a;font-size:20px}table{width:100%;border-collapse:collapse;margin-top:12px}td,th{border:1px solid #ddd;padding:6px;font-size:13px;text-align:left}</style></head><body><h1>Proposta di risparmio — ${EN.commodity==='gas'?'Gas':'Luce'}</h1><p>Cliente: <b>${esc(d.customer_name||'')}</b> · Consumo annuo stimato: ${d.annual_consumption} ${unit}</p><p>Spesa attuale: <b>${enEur(best.annual_cost_current)}/anno</b><br>Offerta consigliata: <b>${esc(best.supplier_name)} — ${esc(best.offer_name)}</b> a ${enEur(best.annual_cost_offer)}/anno → risparmio <b>${enEur(best.annual_saving)}/anno</b></p><table><thead><tr><th>#</th><th>Offerta</th><th>€/anno</th><th>Risparmio</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:16px;font-size:11px;color:#888">Stima indicativa sulla sola componente materia energia. Generato da NovaCRM. Diritto di recesso 14 giorni sul nuovo contratto.</p><script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}else{toast('Abilita i popup per stampare');}
 }
 /* ===================== FINE MODULO ENERGIA ===================== */
 
