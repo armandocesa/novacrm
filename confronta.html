@@ -91,13 +91,13 @@ async function compare(){
 function consList(o){
   const u=C==='ele'?'kWh':'Smc';const out=[];
   if(o.price_type==='indexed')out.push('⚠ Prezzo variabile (segue '+(o.index_name||'mercato')+')'); else out.push('Prezzo bloccato');
-  out.push(o.duration_months?('Vincolo prezzo '+o.duration_months+' mesi'):'Nessun vincolo (indeterminato)');
+  out.push(o.duration_months>0?('Vincolo prezzo '+o.duration_months+' mesi'):'Nessun vincolo (indeterminato)');
   out.push(o.fixed_fee_year>0?('Quota fissa '+eur(o.fixed_fee_year)+'/anno'):'Nessuna quota fissa');
   out.push('Oneri di recesso: da condizioni contrattuali');
   return out;
 }
 function render(d){
-  const ps=(d.proposals||[]).filter(x=>x.annual_saving>0).slice(0,6);
+  const ps=(d.proposals||[]).filter(x=>x.annual_saving>0);
   const box=document.getElementById('results');
   if(!ps.length){box.innerHTML='<div class="card" style="margin-top:18px"><b>Sei già su una buona offerta 👍</b><p class="sub" style="margin:6px 0 0">Non abbiamo trovato offerte più convenienti.</p></div>';box.scrollIntoView({behavior:'smooth'});return;}
   const cur=d.annual_cost_current||ps[0].annual_cost_current||0;
