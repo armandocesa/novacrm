@@ -73,6 +73,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SB=supabase.createClient('https://xargkgrqgbcpmxtrfjkz.supabase.co','sb_publishable_qJucftqrLTUtkXeCZV4q0g_u_zP2wsh');
+const _q=new URLSearchParams(location.search);const SRC=_q.get('utm_source')||_q.get('aff')||_q.get('ref')||'landing';
 let C='ele', LAST=null;
 const eur=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);
 function setC(c){C=c;document.getElementById('bEle').className=c==='ele'?'on':'';document.getElementById('bGas').className=c==='gas'?'on':'';const u=c==='ele'?'kWh':'Smc';document.getElementById('lc').innerHTML='Consumo del periodo ('+u+') <span class="hint">— in bolletta</span>';document.getElementById('lp').innerHTML='Prezzo materia energia (€/'+u+') <span class="hint">— in bolletta</span>';}
@@ -113,7 +114,8 @@ function render(d){
         <div><label>Email *</label><input id="le" type="email" placeholder="email@esempio.it"></div>
         <div class="full"><label>Telefono</label><input id="lt" placeholder="+39 ..."></div>
       </div>
-      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:12.5px;color:var(--mut);margin:6px 0 12px"><input type="checkbox" id="lcons" style="width:auto;margin-top:3px"><span>Acconsento al trattamento dei dati per ricevere la proposta (Privacy/GDPR). Diritto di recesso 14 giorni sul nuovo contratto.</span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:12.5px;color:var(--mut);margin:6px 0 12px"><input type="checkbox" id="lcons" style="width:auto;margin-top:3px"><span>Acconsento al trattamento dei dati per ricevere la proposta (Privacy/GDPR). Diritto di recesso 14 giorni sul nuovo contratto. *</span></label>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:12.5px;color:var(--mut);margin:0 0 12px"><input type="checkbox" id="lcons2" style="width:auto;margin-top:3px"><span>Acconsento a essere ricontattato dai partner e alla comunicazione dei dati a terzi per finalità commerciali (facoltativo).</span></label>
       <div id="lerr" class="err"></div>
       <button class="btn" id="lgo" onclick="sendLead()">Ricevi la proposta</button>
     </div>`;
@@ -124,6 +126,7 @@ function cardHtml(o,masked){return `<div class="off ${o.is_recommended?'best':''
       <div class="price"><div class="old">${eur(o.annual_cost_current)}/anno</div><b>${eur(o.annual_cost_offer)}/anno</b></div></div>
     <div class="pros"><span class="pro">✓ Risparmi ${eur(o.annual_saving)}/anno</span>${o.green?'<span class="pro">✓ 100% green</span>':''}</div>
     <div class="cons">${consList(o).map(c=>'<span class="con">• '+c+'</span>').join('')}</div>
+    ${masked?'':`<div style="margin-top:8px">${o.partner_status==='active'?'<span style="font-size:12.5px;color:var(--g2);font-weight:700">✓ Te lo attiviamo noi</span>':((o.signup_url||o.supplier_website)?('<a href="'+esc(o.signup_url||o.supplier_website)+'" target="_blank" rel="noopener" style="font-size:12.5px;color:var(--g2);font-weight:600">Vai al sito del fornitore ↗</a>'):'')}</div>`}
   </div>`;}
 function renderRevealed(d,name){
   const ps=(d.proposals||[]).filter(x=>x.annual_saving>0).slice(0,8);
@@ -139,7 +142,7 @@ async function sendLead(){
   if(!name||!email){e.textContent='Nome ed email sono obbligatori.';return;}
   if(!document.getElementById('lcons').checked){e.textContent='Serve il consenso al trattamento dati.';return;}
   const lgo=document.getElementById('lgo');lgo.disabled=true;lgo.textContent='Invio…';
-  const p=Object.assign({},LAST.p,{customer_name:name,email,phone:document.getElementById('lt').value||null,current_supplier:document.getElementById('sup').value||null,consent:true});
+  const p=Object.assign({},LAST.p,{customer_name:name,email,phone:document.getElementById('lt').value||null,current_supplier:document.getElementById('sup').value||null,consent:true,marketing_consent:!!(document.getElementById('lcons2')&&document.getElementById('lcons2').checked),source:SRC});
   const {data,error}=await SB.rpc('energy_public_lead',{p});
   lgo.disabled=false;lgo.textContent='Ricevi la proposta';
   if(error){e.textContent='Errore: '+error.message;return;}
