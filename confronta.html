@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Confronta luce e gas e risparmia</title>
+<style>
+  :root{--bg:#f5f7fb;--card:#fff;--bd:#e5e7eb;--ink:#0f172a;--mut:#64748b;--g:#0e9f6e;--g2:#0b7d57;--gsoft:#e7f7f0;--amber:#b45309;--asoft:#fdf3e3;--red:#dc2626;--pri:#4f46e5}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;margin-bottom:18px}
+  .logo{width:30px;height:30px;border-radius:8px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;color:#fff}
+  h1{font-size:27px;line-height:1.2;margin-bottom:8px}
+  .sub{color:var(--mut);font-size:15px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .toggle{display:flex;gap:8px;margin-bottom:16px}
+  .toggle button{flex:1;border:1.5px solid var(--bd);background:#fff;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer}
+  .toggle button.on{border-color:var(--g);background:var(--gsoft);color:var(--g2)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  label{display:block;font-size:12.5px;font-weight:600;color:#334155;margin-bottom:5px}
+  .hint{font-weight:400;color:var(--mut)}
+  input{width:100%;border:1px solid var(--bd);border-radius:10px;padding:11px 12px;font-size:15px}
+  .full{grid-column:1/-1}
+  .btn{width:100%;margin-top:8px;background:var(--g);color:#fff;border:0;border-radius:11px;padding:14px;font-size:16px;font-weight:700;cursor:pointer}
+  .btn:disabled{opacity:.6}
+  .btn.ghost{background:#fff;color:var(--g2);border:1.5px solid var(--g)}
+  .err{color:var(--red);font-size:14px;margin-top:10px}
+  .hero{background:linear-gradient(135deg,var(--g),var(--g2));color:#fff;border-radius:16px;padding:22px;margin:18px 0}
+  .hero .big{font-size:38px;font-weight:800;line-height:1.1;margin:4px 0}
+  .off{border:1px solid var(--bd);border-radius:13px;padding:14px;margin-top:10px;background:#fff}
+  .off.best{border:2px solid var(--g);background:var(--gsoft)}
+  .off .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+  .off .nm{font-weight:700;font-size:15px}
+  .off .price{text-align:right;white-space:nowrap}
+  .off .price b{font-size:18px;color:var(--g2)}
+  .off .old{color:var(--mut);text-decoration:line-through;font-size:13px}
+  .badge{font-size:11px;font-weight:700;border-radius:20px;padding:2px 8px;margin-left:6px}
+  .b-best{background:var(--g);color:#fff}
+  .pros,.cons{font-size:12.5px;margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 12px}
+  .pro{color:var(--g2)} .con{color:var(--amber)}
+  .foot{color:var(--mut);font-size:12px;margin-top:24px;text-align:center;line-height:1.6}
+  @media(max-width:520px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="logo">⚡</span> Confronta &amp; Risparmia</div>
+  <h1>Quanto puoi risparmiare su luce e gas?</h1>
+  <p class="sub">Inserisci pochi dati della tua bolletta: confrontiamo gratis le offerte reali del mercato e ti diciamo qual è la più conveniente, con pro e contro.</p>
+
+  <div class="card" id="formCard">
+    <div class="toggle">
+      <button id="bEle" class="on" type="button" onclick="setC('ele')">⚡ Luce</button>
+      <button id="bGas" type="button" onclick="setC('gas')">🔥 Gas</button>
+    </div>
+    <div class="grid">
+      <div><label id="lc">Consumo del periodo (kWh) <span class="hint">— in bolletta</span></label><input id="cons" type="number" step="any" placeholder="es. 600"></div>
+      <div><label id="lp">Prezzo materia energia (€/kWh) <span class="hint">— in bolletta</span></label><input id="price" type="number" step="any" placeholder="es. 0,16"></div>
+      <div><label>Quota fissa attuale (€/anno) <span class="hint">— se indicata</span></label><input id="fee" type="number" step="any" placeholder="es. 90"></div>
+      <div><label>CAP</label><input id="cap" placeholder="es. 20121"></div>
+      <div class="full"><label>Fornitore attuale <span class="hint">— facoltativo</span></label><input id="sup" placeholder="es. Enel Energia"></div>
+    </div>
+    <div id="err" class="err"></div>
+    <button class="btn" id="go" onclick="compare()">Confronta gratis</button>
+  </div>
+
+  <div id="results"></div>
+
+  <p class="foot">Stima indicativa sulla sola componente materia energia, su offerte reali del mercato libero (fonte ARERA). Nessun costo, nessun impegno.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB=supabase.createClient('https://xargkgrqgbcpmxtrfjkz.supabase.co','sb_publishable_qJucftqrLTUtkXeCZV4q0g_u_zP2wsh');
+let C='ele', LAST=null;
+const eur=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);
+function setC(c){C=c;document.getElementById('bEle').className=c==='ele'?'on':'';document.getElementById('bGas').className=c==='gas'?'on':'';const u=c==='ele'?'kWh':'Smc';document.getElementById('lc').innerHTML='Consumo del periodo ('+u+') <span class="hint">— in bolletta</span>';document.getElementById('lp').innerHTML='Prezzo materia energia (€/'+u+') <span class="hint">— in bolletta</span>';}
+function val(id){return document.getElementById(id).value.replace(',','.');}
+async function compare(){
+  const err=document.getElementById('err');err.textContent='';
+  const cons=parseFloat(val('cons')),price=parseFloat(val('price'));
+  if(!cons||!price){err.textContent='Inserisci consumo e prezzo della materia energia (li trovi in bolletta).';return;}
+  const go=document.getElementById('go');go.disabled=true;go.textContent='Calcolo in corso…';
+  const p={commodity:C,consumption_total:cons,current_unit_price:price,current_fixed_fee_year:parseFloat(val('fee'))||0,postal_code:document.getElementById('cap').value||null};
+  const {data,error}=await SB.rpc('energy_quote_public',{p});
+  go.disabled=false;go.textContent='Confronta gratis';
+  if(error){err.textContent='Errore: '+error.message;return;}
+  LAST={p, q:data};render(data);
+}
+function consList(o){
+  const u=C==='ele'?'kWh':'Smc';const out=[];
+  if(o.price_type==='indexed')out.push('⚠ Prezzo variabile (segue '+(o.index_name||'mercato')+')'); else out.push('Prezzo bloccato');
+  out.push(o.duration_months?('Vincolo prezzo '+o.duration_months+' mesi'):'Nessun vincolo (indeterminato)');
+  out.push(o.fixed_fee_year>0?('Quota fissa '+eur(o.fixed_fee_year)+'/anno'):'Nessuna quota fissa');
+  out.push('Oneri di recesso: da condizioni contrattuali');
+  return out;
+}
+function render(d){
+  const ps=(d.proposals||[]).filter(x=>x.annual_saving>0).slice(0,6);
+  const box=document.getElementById('results');
+  if(!ps.length){box.innerHTML='<div class="card" style="margin-top:18px"><b>Sei già su una buona offerta 👍</b><p class="sub" style="margin:6px 0 0">Non abbiamo trovato offerte più convenienti.</p></div>';box.scrollIntoView({behavior:'smooth'});return;}
+  const cur=d.annual_cost_current||ps[0].annual_cost_current||0;
+  const avg=ps.reduce((s,o)=>s+o.annual_saving,0)/ps.length;
+  const best=Math.max(...ps.map(o=>o.annual_saving));
+  const pct=cur>0?Math.round(avg/cur*100):0;
+  box.innerHTML=`<div class="hero"><div style="font-size:13px;opacity:.92">In base ai tuoi consumi potresti risparmiare in media</div><div class="big">${eur(avg)}/anno</div><div style="font-size:15px;opacity:.95">pari a circa <b>${pct}%</b> della spesa attuale · fino a ${eur(best)}/anno con la migliore offerta</div></div>
+    <div style="background:var(--asoft);border:1px solid #f0c987;border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13.5px;color:var(--amber)">🔒 Abbiamo trovato ${ps.length} offerte più convenienti della tua. <b>Iscriviti gratis qui sotto</b> per scoprire i fornitori e ricevere la proposta su misura.</div>
+    <div class="card" style="margin-top:16px"><b style="font-size:16px">Scopri i fornitori e ricevi la proposta</b>
+      <p class="sub" style="margin:6px 0 12px">Lasciaci i tuoi contatti: ti inviamo la proposta e ti accompagniamo nel cambio (gratis).</p>
+      <div class="grid">
+        <div><label>Nome e cognome *</label><input id="ln" placeholder="Mario Rossi"></div>
+        <div><label>Email *</label><input id="le" type="email" placeholder="email@esempio.it"></div>
+        <div class="full"><label>Telefono</label><input id="lt" placeholder="+39 ..."></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:12.5px;color:var(--mut);margin:6px 0 12px"><input type="checkbox" id="lcons" style="width:auto;margin-top:3px"><span>Acconsento al trattamento dei dati per ricevere la proposta (Privacy/GDPR). Diritto di recesso 14 giorni sul nuovo contratto.</span></label>
+      <div id="lerr" class="err"></div>
+      <button class="btn" id="lgo" onclick="sendLead()">Ricevi la proposta</button>
+    </div>`;
+  box.scrollIntoView({behavior:'smooth'});
+}
+function cardHtml(o,masked){return `<div class="off ${o.is_recommended?'best':''}">
+    <div class="top"><div class="nm">${masked?'🔒 ':''}${esc(o.supplier_name)}${(o.offer_name&&!masked)?(' — '+esc(o.offer_name)):''}${o.is_recommended?'<span class="badge b-best">Consigliata</span>':''}${o.green?' 🌱':''}</div>
+      <div class="price"><div class="old">${eur(o.annual_cost_current)}/anno</div><b>${eur(o.annual_cost_offer)}/anno</b></div></div>
+    <div class="pros"><span class="pro">✓ Risparmi ${eur(o.annual_saving)}/anno</span>${o.green?'<span class="pro">✓ 100% green</span>':''}</div>
+    <div class="cons">${consList(o).map(c=>'<span class="con">• '+c+'</span>').join('')}</div>
+  </div>`;}
+function renderRevealed(d,name){
+  const ps=(d.proposals||[]).filter(x=>x.annual_saving>0).slice(0,8);
+  if(!ps.length){document.getElementById('results').innerHTML='<div class="hero" style="text-align:center"><div class="big">Grazie '+esc(name.split(' ')[0])+'!</div><div>Ti contatteremo a breve.</div></div>';return;}
+  const best=ps[0];const cards=ps.map(o=>cardHtml(o,false)).join('');
+  document.getElementById('results').innerHTML=`<div class="hero"><div style="font-size:13px;opacity:.92">Grazie ${esc(name.split(' ')[0])}! Ecco i fornitori</div><div class="big">${eur(best.annual_saving)}</div><div style="font-size:13px;opacity:.92">Migliore: ${esc(best.supplier_name)} · ${esc(best.offer_name)}</div></div>
+    <div style="background:var(--gsoft);border:1px solid #9fe1cb;border-radius:12px;padding:12px 14px;margin:14px 0;font-size:13.5px;color:var(--g2)">✓ Proposta registrata. Ti contatteremo per attivare il risparmio.</div>${cards}`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function sendLead(){
+  const e=document.getElementById('lerr');e.textContent='';
+  const name=document.getElementById('ln').value.trim(),email=document.getElementById('le').value.trim();
+  if(!name||!email){e.textContent='Nome ed email sono obbligatori.';return;}
+  if(!document.getElementById('lcons').checked){e.textContent='Serve il consenso al trattamento dati.';return;}
+  const lgo=document.getElementById('lgo');lgo.disabled=true;lgo.textContent='Invio…';
+  const p=Object.assign({},LAST.p,{customer_name:name,email,phone:document.getElementById('lt').value||null,current_supplier:document.getElementById('sup').value||null,consent:true});
+  const {data,error}=await SB.rpc('energy_public_lead',{p});
+  lgo.disabled=false;lgo.textContent='Ricevi la proposta';
+  if(error){e.textContent='Errore: '+error.message;return;}
+  renderRevealed(data,name);
+}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+</script>
+</body>
+</html>
