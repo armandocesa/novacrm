@@ -2863,7 +2863,7 @@ function modLoadVoice(){
 }
 
 /* ===================== MODULO ENERGIA (analisi bolletta luce/gas) ===================== */
-const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[], sup:[], filePath:null};
+const EN={commodity:'ele', last:null, draft:null, view:'analisi', acts:[], sup:[], filePath:null, filters:{ptype:'all',green:false,showAll:false}};
 const EN_ST={draft:['#9097a3','Bozza'],ready:['#4f46e5','Pronta'],sent:['#d97706','Inviata'],accepted:['#0d9488','Accettata'],switching:['#d97706','Switch in corso'],active:['#15a34a','Attiva'],rejected:['#dc2626','Rifiutata'],cancelled:['#9097a3','Annullata']};
 const EN_ST_KEYS=['draft','ready','sent','accepted','switching','active','rejected','cancelled'];
 function enEur(n){try{return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0);}catch(e){return '€'+Math.round(n||0);}}
@@ -2975,7 +2975,7 @@ async function enAnalyze(){
   try{
     msg.style.color='var(--text-3)';msg.textContent='Analisi e salvataggio nel CRM in corso…';
     const dd=await rpc('energy_analyze_and_crm',{p});
-    msg.textContent=''; EN.last=dd; box.innerHTML=enRender(dd);
+    msg.textContent=''; EN.last=dd; EN.filters={ptype:'all',green:false,showAll:false}; box.innerHTML=enRender(dd);
     toast('Lead e trattativa creati nel CRM');
   }catch(e){msg.style.color='var(--red)';msg.textContent='Errore: '+(e&&e.message?e.message:e);toast('Errore durante l’analisi');}
 }
@@ -2985,8 +2985,10 @@ function enRender(d){
   if(!ps.length||ps[0].annual_saving<=0){
     return note('<b>Sei già su una buona offerta 👍</b> Nessuna proposta migliorativa trovata. Consumo annuo stimato: '+((d&&d.annual_consumption)||'—')+' '+unit+'.')+crmNote;
   }
-  const best=ps[0];
-  const rows=ps.map(p=>`<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
+  const fps=enFiltered(ps);
+  const best=fps[0]||ps[0];
+  const shown=(EN.filters&&EN.filters.showAll)?fps:fps.slice(0,8);
+  const rows=shown.map(p=>`<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
     <td>${p.rank}</td>
     <td><b>${esc(p.supplier_name)}</b> — ${esc(p.offer_name)} ${p.is_recommended?'<span class="pill cli" style="font-size:11px">Consigliata</span>':''} ${p.green?'🌱':''}
       <div style="color:var(--text-3);font-size:12px">${p.price_type==='fixed'?'Prezzo fisso':('Indicizzata '+esc(p.index_name||'')+' +'+p.spread_eur)}${p.duration_months?(' · '+p.duration_months+' mesi'):''} · quota ${enEur(p.fixed_fee_year)}/anno</div></td>
@@ -3001,9 +3003,11 @@ function enRender(d){
       <div style="font-size:12px;opacity:.85;margin-top:4px">Consumo annuo ${d.annual_consumption} ${unit}</div>
     </div>
     ${crmNote}
+    ${enFilterChips()}
     <div class="tablecard" style="margin-top:12px"><table>
       <thead><tr><th>#</th><th>Offerta</th><th style="text-align:right">Attuale</th><th style="text-align:right">Nuova</th><th style="text-align:right">Risparmio</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
+    ${enMoreBtn(fps,shown)}
     <div style="margin-top:10px"><button class="btn ghost" onclick="enPrintProposal()">Salva proposta (PDF)</button></div>
     <div class="card" style="margin-top:12px">
       <h3>Avvia pratica di attivazione</h3>
@@ -3063,11 +3067,13 @@ function enConfronto(){
   }
   const unit=EN.commodity==='gas'?'Smc':'kWh';
   const cur=d.proposals[0].annual_cost_current;
-  const best=d.proposals[0];
-  const maxv=Math.max(cur, ...d.proposals.map(p=>p.annual_cost_offer))||1;
+  const fps=enFiltered(d.proposals);
+  const top=fps.slice(0,12);
+  const best=fps[0]||d.proposals[0];
+  const maxv=Math.max(cur, ...top.map(p=>p.annual_cost_offer))||1;
   const bar=(cost,color)=>`<div style="background:var(--surface-3);border-radius:6px;height:20px;width:100%"><div style="width:${Math.max(3,Math.round(cost/maxv*100))}%;height:100%;background:${color};border-radius:6px"></div></div>`;
   let rows=`<tr><td style="white-space:nowrap"><b>Attuale</b><div style="color:var(--text-3);font-size:12px">${esc(d.current_supplier||'Fornitore attuale')}</div></td><td style="width:45%">${bar(cur,'var(--red)')}</td><td style="text-align:right;font-weight:700">${enEur(cur)}/anno</td><td></td></tr>`;
-  rows+=d.proposals.map(p=>{
+  rows+=top.map(p=>{
     const col=p.is_recommended?'var(--green)':'var(--primary)';
     return `<tr ${p.is_recommended?'style="background:var(--green-soft)"':''}>
       <td style="white-space:nowrap"><b>${esc(p.supplier_name)}</b> ${p.is_recommended?'<span class="pill cli" style="font-size:11px">Consigliata</span>':''}<div style="color:var(--text-3);font-size:12px">${esc(p.offer_name)} · ${p.price_type==='fixed'?'fisso':'indicizzata'}</div></td>
@@ -3076,7 +3082,7 @@ function enConfronto(){
       <td style="text-align:right;color:var(--green);font-weight:700">−${enEur(p.annual_saving)}</td>
     </tr>`;
   }).join('');
-  return note(`<b>Confronto costi fornitori.</b> Consumo annuo stimato <b>${d.annual_consumption} ${unit}</b>. Spesa attuale <b>${enEur(cur)}/anno</b>. Migliore: <b>${esc(best.supplier_name)}</b> a ${enEur(best.annual_cost_offer)}/anno (risparmio ${enEur(best.annual_saving)}).`)+
+  return note(`<b>Confronto costi fornitori.</b> Consumo annuo stimato <b>${d.annual_consumption} ${unit}</b>. Spesa attuale <b>${enEur(cur)}/anno</b>. Migliore: <b>${esc(best.supplier_name)}</b> a ${enEur(best.annual_cost_offer)}/anno (risparmio ${enEur(best.annual_saving)}). ${fps.length} offerte (prime 12).`)+enFilterChips()+
   `<div class="tablecard"><table><thead><tr><th>Fornitore</th><th>Costo annuo (sola energia)</th><th style="text-align:right">€/anno</th><th style="text-align:right">Risparmio</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 const EN_PS={none:['#9097a3','Da contattare'],target:['#4f46e5','Target'],contacted:['#d97706','Contattato'],negotiating:['#d97706','In trattativa'],active:['#15a34a','Attivo'],rejected:['#dc2626','Scartato']};
@@ -3144,6 +3150,11 @@ function enPrintProposal(){
   const html=`<html><head><meta charset="utf-8"><title>Proposta risparmio energia</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{color:#15a34a;font-size:20px}table{width:100%;border-collapse:collapse;margin-top:12px}td,th{border:1px solid #ddd;padding:6px;font-size:13px;text-align:left}</style></head><body><h1>Proposta di risparmio — ${EN.commodity==='gas'?'Gas':'Luce'}</h1><p>Cliente: <b>${esc(d.customer_name||'')}</b> · Consumo annuo stimato: ${d.annual_consumption} ${unit}</p><p>Spesa attuale: <b>${enEur(best.annual_cost_current)}/anno</b><br>Offerta consigliata: <b>${esc(best.supplier_name)} — ${esc(best.offer_name)}</b> a ${enEur(best.annual_cost_offer)}/anno → risparmio <b>${enEur(best.annual_saving)}/anno</b></p><table><thead><tr><th>#</th><th>Offerta</th><th>€/anno</th><th>Risparmio</th></tr></thead><tbody>${rows}</tbody></table><p style="margin-top:16px;font-size:11px;color:#888">Stima indicativa sulla sola componente materia energia. Generato da NovaCRM. Diritto di recesso 14 giorni sul nuovo contratto.</p><script>window.onload=function(){window.print()}<\/script></body></html>`;
   const w=window.open('','_blank'); if(w){w.document.write(html);w.document.close();}else{toast('Abilita i popup per stampare');}
 }
+function enFiltered(ps){ps=ps||[];const f=EN.filters||{ptype:'all',green:false};return ps.filter(p=>(f.ptype==='all'||p.price_type===f.ptype)&&(!f.green||p.green));}
+function enShowResults(){const el=document.getElementById('en_results');if(el&&EN.last)el.innerHTML=enRender(EN.last);}
+function enSetResFilter(k,v){EN.filters=EN.filters||{ptype:'all',green:false,showAll:false};if(k==='green')EN.filters.green=!EN.filters.green;else if(k==='showAll')EN.filters.showAll=true;else{EN.filters.ptype=v;EN.filters.showAll=false;}if(EN.view==='confronto')render('mod_energia');else enShowResults();}
+function enMoreBtn(fps,shown){return (!(EN.filters&&EN.filters.showAll)&&fps.length>shown.length)?`<div style="margin-top:8px"><span style="cursor:pointer;color:var(--primary);font-size:13px" onclick="enSetResFilter('showAll')">Mostra tutte le ${fps.length} offerte</span></div>`:'';}
+function enFilterChips(){const f=EN.filters||{ptype:'all',green:false};const c=(lbl,act,on)=>`<span onclick="${on}" style="cursor:pointer;font-size:12px;padding:3px 11px;border-radius:20px;border:1px solid ${act?'var(--green)':'var(--border)'};background:${act?'var(--green-soft)':'transparent'};color:${act?'var(--green)':'var(--text-2)'};margin:0 6px 6px 0;display:inline-block">${lbl}</span>`;return `<div style="margin:12px 0 4px">${c('Tutte',f.ptype==='all',"enSetResFilter('ptype','all')")}${c('Prezzo fisso',f.ptype==='fixed',"enSetResFilter('ptype','fixed')")}${c('Indicizzate',f.ptype==='indexed',"enSetResFilter('ptype','indexed')")}${c('Solo green'+(f.green?' ✓':''),f.green,"enSetResFilter('green')")}</div>`;}
 /* ===================== FINE MODULO ENERGIA ===================== */
 
 
